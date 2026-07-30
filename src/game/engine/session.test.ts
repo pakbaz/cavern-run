@@ -153,6 +153,20 @@ describe('finishing a cave', () => {
 });
 
 describe('advancing between caves', () => {
+  it('restores the cave, score and lives from a checkpoint', () => {
+    const run = new CaveSession(
+      [spec(), spec({ id: 'test-b', letter: 'B' })],
+      1,
+      4,
+      EXTRA_LIFE_EVERY + 250,
+    );
+
+    expect(run.caveIndex).toBe(1);
+    expect(run.score).toBe(EXTRA_LIFE_EVERY + 250);
+    expect(run.lives).toBe(4);
+    expect(run.pointsToExtraLife).toBe(EXTRA_LIFE_EVERY - 250);
+  });
+
   it('moves to the next cave and rebuilds it', () => {
     const run = session([spec(), spec({ id: 'test-b', letter: 'B' })]);
     const first = run.simulation;

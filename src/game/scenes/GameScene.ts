@@ -131,7 +131,6 @@ export class GameScene extends Phaser.Scene {
 
   private async completeCave(): Promise<void> {
     const { session } = this.state;
-    const spec = session.spec;
 
     audio().sfx.caveComplete();
     audio().music.stop();
@@ -148,10 +147,11 @@ export class GameScene extends Phaser.Scene {
         diamonds: result.diamonds,
         completed: true,
       }),
-      saveProgress(Math.min(result.caveIndex + 1, CAVE_COUNT - 1), result.totalScore),
+      saveProgress(result.caveIndex + 1, result.totalScore, session.lives).then((progress) => {
+        this.state.progress = progress;
+      }),
     ]);
 
-    void spec;
     this.scene.start(SceneKey.CaveComplete);
   }
 

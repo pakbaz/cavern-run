@@ -6,3 +6,5 @@ dist/
 coverage/
 .impeccable/
 .playwright-mcp/
+.wrangler/
+.dev.vars

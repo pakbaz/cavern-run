@@ -10,7 +10,7 @@ import {
   qualifies,
   submitScore,
   type ScoreEntry,
-} from '../state/profile';
+} from '../state/scores';
 import { RUN_STATE_KEY, type RunState } from './RunState';
 import {
   Ink,
@@ -71,11 +71,15 @@ export class GameOverScene extends Phaser.Scene {
     // Input is bound only once the table has loaded. Binding before the await
     // leaves a window where `entering` is still false, so a key pressed while
     // storage is opening would dismiss the screen and skip initials entry.
-    const scores = await loadHighScores();
-    if (qualifies(scores, session.score)) {
-      this.beginEntry();
-    } else {
-      this.showTable(scores);
+    try {
+      const scores = await loadHighScores();
+      if (qualifies(scores, session.score)) {
+        this.beginEntry();
+      } else {
+        this.showTable(scores);
+      }
+    } catch {
+      this.showScoresUnavailable();
     }
     this.input.keyboard?.on('keydown', this.onKey, this);
   }
@@ -108,6 +112,12 @@ export class GameOverScene extends Phaser.Scene {
         );
       });
     }
+    const hint = centred(this, layout().height - 34, 'PRESS ANY KEY', bodyStyle(11, Ink.dim));
+    pulse(this, hint);
+  }
+
+  private showScoresUnavailable(): void {
+    centred(this, designY(246), 'BEST RUNS OFFLINE', bodyStyle(12, Ink.dim));
     const hint = centred(this, layout().height - 34, 'PRESS ANY KEY', bodyStyle(11, Ink.dim));
     pulse(this, hint);
   }
@@ -186,15 +196,18 @@ export class GameOverScene extends Phaser.Scene {
     audio().sfx.uiSelect();
 
     const { session } = this.state;
-    await submitScore({
-      name: normalizeInitials(this.slots.map((index) => LETTERS[index] ?? '').join('')),
-      score: session.score,
-      caveReached: session.caveIndex + 1,
-      caveLetter: session.spec.letter,
-      date: new Date().toISOString(),
-    });
-
-    this.toTitle();
+    try {
+      await submitScore({
+        name: normalizeInitials(this.slots.map((index) => LETTERS[index] ?? '').join('')),
+        score: session.score,
+        caveReached: session.caveIndex + 1,
+      });
+      this.toTitle();
+    } catch {
+      this.entering = false;
+      this.slotText.forEach((text) => text.setVisible(false));
+      centred(this, designY(302), 'SCORE SERVER OFFLINE', bodyStyle(12, Ink.danger));
+    }
   }
 
   private toTitle(): void {

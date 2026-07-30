@@ -4,8 +4,8 @@ import { layout } from '../../layout';
 
 import { SceneKey } from '../../config';
 import { audio } from '../audio/index';
-import { CAVE_COUNT } from '../levels/index';
-import { loadHighScores, type ScoreEntry } from '../state/profile';
+import { CAVE_COUNT, caveAt } from '../levels/index';
+import { loadHighScores, type ScoreEntry } from '../state/scores';
 import { saveSettings } from '../state/settings';
 import { POSTER_KEY } from './BootScene';
 import { RUN_STATE_KEY, type RunState } from './RunState';
@@ -59,8 +59,12 @@ export class TitleScene extends Phaser.Scene {
     this.input.keyboard?.on('keydown', this.onKey, this);
     this.input.on(Phaser.Input.Events.POINTER_DOWN, this.onPointer, this);
 
-    this.scores = await loadHighScores();
-    this.drawScores();
+    try {
+      this.scores = await loadHighScores();
+      this.drawScores();
+    } catch {
+      this.drawScoresUnavailable();
+    }
   }
 
   private drawBackdrop(): void {
@@ -83,25 +87,36 @@ export class TitleScene extends Phaser.Scene {
 
   private buildMenu(): void {
     const { settings } = this.state;
+    const canResume = this.state.progress.furthestCave > 0 && this.state.progress.furthestCave < CAVE_COUNT;
+    const changeMusic = (delta: number): void => {
+      settings.musicVolume = step(settings.musicVolume, delta);
+      audio().engine.setMusicVolume(settings.musicVolume);
+    };
+    const changeSound = (delta: number): void => {
+      settings.sfxVolume = step(settings.sfxVolume, delta);
+      audio().engine.setSfxVolume(settings.sfxVolume);
+      audio().sfx.uiMove();
+    };
 
     this.items = [
-      { label: () => 'START RUN', activate: () => this.startRun() },
+      ...(canResume
+        ? [
+            {
+              label: () => `CONTINUE CAVE ${caveAt(this.state.progress.furthestCave).letter}`,
+              activate: () => this.startRun(true),
+            },
+            { label: () => 'NEW RUN', activate: () => this.startRun(false) },
+          ]
+        : [{ label: () => 'START RUN', activate: () => this.startRun(false) }]),
       {
         label: () => `MUSIC      ${meter(settings.musicVolume)}`,
-        activate: () => this.adjust(0, +1),
-        adjust: (delta) => {
-          settings.musicVolume = step(settings.musicVolume, delta);
-          audio().engine.setMusicVolume(settings.musicVolume);
-        },
+        activate: () => changeMusic(+1),
+        adjust: changeMusic,
       },
       {
         label: () => `SOUND      ${meter(settings.sfxVolume)}`,
-        activate: () => this.adjust(1, +1),
-        adjust: (delta) => {
-          settings.sfxVolume = step(settings.sfxVolume, delta);
-          audio().engine.setSfxVolume(settings.sfxVolume);
-          audio().sfx.uiMove();
-        },
+        activate: () => changeSound(+1),
+        adjust: changeSound,
       },
       {
         label: () => `HELMET LAMP  ${settings.lighting ? 'ON ' : 'OFF'}`,
@@ -115,11 +130,12 @@ export class TitleScene extends Phaser.Scene {
       },
     ];
 
-    card(this, 152 - 16, 336, this.items.length * 24 + 24);
+    const menuStart = canResume ? 132 : 142;
+    card(this, menuStart - 16, 336, this.items.length * 20 + 24);
 
     this.labels = this.items.map((item, index) =>
       this.add
-        .text(designX(-148), designY(152 + index * 24), item.label(), bodyStyle(14))
+        .text(designX(-148), designY(menuStart + index * 20), item.label(), bodyStyle(14))
         .setOrigin(0, 0.5),
     );
     this.refresh();
@@ -143,6 +159,10 @@ export class TitleScene extends Phaser.Scene {
     });
   }
 
+  private drawScoresUnavailable(): void {
+    centred(this, designY(306), 'BEST RUNS OFFLINE', bodyStyle(11, Ink.dim));
+  }
+
   private refresh(): void {
     this.labels.forEach((label, index) => {
       const selected = index === this.cursor;
@@ -153,7 +173,7 @@ export class TitleScene extends Phaser.Scene {
 
   private onPointer(): void {
     if (!this.ensureAudio()) return;
-    this.startRun();
+    this.items[0]?.activate();
   }
 
   private onKey(event: KeyboardEvent): void {
@@ -222,8 +242,9 @@ export class TitleScene extends Phaser.Scene {
     audio().sfx.uiMove();
   }
 
-  private startRun(): void {
-    this.state.newRun();
+  private startRun(resume: boolean): void {
+    if (resume) this.state.resumeRun();
+    else this.state.newRun();
     void saveSettings(this.state.settings);
     this.scene.start(SceneKey.CaveIntro);
   }

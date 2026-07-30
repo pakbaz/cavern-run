@@ -5,6 +5,7 @@ import { layout } from '../../layout';
 import { SceneKey } from '../../config';
 import { audio } from '../audio/index';
 import { generateTextures } from '../render/TextureFactory';
+import { loadProgress } from '../state/profile';
 import { loadSettings } from '../state/settings';
 import { RUN_STATE_KEY, RunState } from './RunState';
 import { FONT, Ink } from './ui';
@@ -50,7 +51,9 @@ export class BootScene extends Phaser.Scene {
     const state = new RunState();
     this.registry.set(RUN_STATE_KEY, state);
 
-    state.settings = await loadSettings();
+    const [settings, progress] = await Promise.all([loadSettings(), loadProgress()]);
+    state.settings = settings;
+    state.progress = progress;
     audio().engine.setMusicVolume(state.settings.musicVolume);
     audio().engine.setSfxVolume(state.settings.sfxVolume);
 
