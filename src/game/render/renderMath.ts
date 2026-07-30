@@ -209,3 +209,22 @@ export function formatTime(seconds: number): string {
 export function formatScore(score: number): string {
   return Math.max(0, Math.floor(score)).toString().padStart(6, '0');
 }
+
+/**
+ * How much to scale the glow texture so a light of `radiusTiles` covers that
+ * radius on screen, and how far its edge reaches from the centre in pixels.
+ *
+ * The glow art is a circle that fills its texture, so a light of radius R
+ * cells has to be drawn 2R cells wide. Getting this wrong is invisible in a
+ * still frame -- the lamp simply sits at the wrong size or, if the scale is
+ * dropped entirely, the light drifts away from whatever it is meant to be
+ * lighting.
+ */
+export function glowTransform(
+  radiusTiles: number,
+  textureSize: number,
+  tileSize: number,
+): { scale: number; reach: number } {
+  const scale = (Math.max(0, radiusTiles) * 2 * tileSize) / textureSize;
+  return { scale, reach: (textureSize * scale) / 2 };
+}

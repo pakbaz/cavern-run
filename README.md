@@ -77,7 +77,7 @@ TypeScript, [Phaser 4](https://github.com/phaserjs/phaser), Vite and Vitest.
 
 ```bash
 npm run build       # typecheck, then bundle to dist/
-npm test            # 220 unit tests
+npm test            # 225 unit tests
 npm run typecheck   # types only
 ```
 
