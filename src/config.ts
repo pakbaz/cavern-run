@@ -12,16 +12,18 @@ export const TILE_SIZE = 32;
 export const CAVE_WIDTH = 40;
 export const CAVE_HEIGHT = 22;
 
-/** Visible playfield measured in cells (classic 20x12 proportions). */
+/**
+ * Default playfield in cells (classic 20x12 proportions).
+ *
+ * This is only the starting point: `src/layout.ts` picks the real figures from
+ * the window's size and density, so a phone sees a taller, narrower slice of
+ * cave and a desktop a wider one.
+ */
 export const VIEWPORT_TILES_W = 20;
 export const VIEWPORT_TILES_H = 12;
 
 /** Height of the status bar above the playfield, in pixels. */
 export const HUD_HEIGHT = 32;
-
-/** Internal render resolution; Phaser scales this up to fill the window. */
-export const GAME_WIDTH = VIEWPORT_TILES_W * TILE_SIZE;
-export const GAME_HEIGHT = VIEWPORT_TILES_H * TILE_SIZE + HUD_HEIGHT;
 
 /** Vertical pixel offset of the playfield inside the canvas. */
 export const WORLD_OFFSET_Y = HUD_HEIGHT;

@@ -1,9 +1,11 @@
 import Phaser from 'phaser';
 
-import { GAME_HEIGHT, GAME_WIDTH, SceneKey, TIME_BONUS_PER_SECOND } from '../../config';
+import { layout } from '../../layout';
+
+import { SceneKey, TIME_BONUS_PER_SECOND } from '../../config';
 import { audio } from '../audio/index';
 import { RUN_STATE_KEY, type RunState } from './RunState';
-import { bodyStyle, centred, Ink, pad, panel, titleStyle } from './ui';
+import { Ink, bodyStyle, card, centred, designY, pad, relayoutOnResize, titleStyle } from './ui';
 
 /** Seconds are counted off this fast, in milliseconds per second banked. */
 const TALLY_MS = 26;
@@ -30,6 +32,7 @@ export class CaveCompleteScene extends Phaser.Scene {
   }
 
   create(): void {
+    relayoutOnResize(this);
     // Scene instances outlive a visit; clear per-visit state (see CaveIntroScene).
     this.done = false;
     this.remaining = 0;
@@ -43,25 +46,25 @@ export class CaveCompleteScene extends Phaser.Scene {
     }
 
     this.cameras.main.setBackgroundColor('#05070f');
-    panel(this, GAME_WIDTH / 2 - 180, 100, 360, 190);
+    card(this, 100, 360, 190);
 
-    centred(this, 142, 'CAVE CLEAR', titleStyle(38));
-    centred(this, 180, `${result.diamonds} DIAMONDS  ${pad(result.caveScore, 5)}`, bodyStyle(13));
+    centred(this, designY(142), 'CAVE CLEAR', titleStyle(38));
+    centred(this, designY(180), `${result.diamonds} DIAMONDS  ${pad(result.caveScore, 5)}`, bodyStyle(13));
 
     // The tally starts from the pre-bonus score and climbs, so the number
     // the player watches is the same one the HUD will show next cave.
     this.remaining = result.secondsLeft;
     this.banked = result.totalScore - result.timeBonus;
 
-    this.secondsLine = centred(this, 212, '', bodyStyle(15, Ink.gold));
-    this.scoreLine = centred(this, 240, '', bodyStyle(20, Ink.bright));
+    this.secondsLine = centred(this, designY(212), '', bodyStyle(15, Ink.gold));
+    this.scoreLine = centred(this, designY(240), '', bodyStyle(20, Ink.bright));
     this.refresh();
 
     if (result.extraLives > 0) {
-      centred(this, 266, `EXTRA LIFE x${result.extraLives}`, bodyStyle(12, Ink.accent));
+      centred(this, designY(266), `EXTRA LIFE x${result.extraLives}`, bodyStyle(12, Ink.accent));
     }
 
-    centred(this, GAME_HEIGHT - 34, 'PRESS ANY KEY', bodyStyle(11, Ink.dim));
+    centred(this, layout().height - 34, 'PRESS ANY KEY', bodyStyle(11, Ink.dim));
 
     this.tally = this.time.addEvent({
       delay: TALLY_MS,

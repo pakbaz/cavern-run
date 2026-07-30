@@ -9,6 +9,7 @@ import {
   TILE_SIZE,
   type CavePalette,
 } from '../../config';
+import { layout } from '../../layout';
 import type { Cave, TileMove } from '../engine/Cave';
 import { Tile, type TileId } from '../engine/tiles';
 import { MagicWallStatus, type CaveRuntime } from '../engine/simTypes';
@@ -36,6 +37,12 @@ import {
   tileVariant,
   visibleTiles,
 } from './renderMath';
+
+/** The visible cave size right now, which changes when the window does. */
+function viewport(): { widthTiles: number; heightTiles: number } {
+  const { tilesW, tilesH } = layout();
+  return { widthTiles: tilesW, heightTiles: tilesH };
+}
 
 /**
  * Draws the cave.
@@ -101,6 +108,7 @@ export class WorldRenderer {
       cave.height,
       -1e9,
       -1e9,
+      viewport(),
     );
     camera.setScroll(start.x, start.y);
   }
@@ -119,7 +127,7 @@ export class WorldRenderer {
     this.moveCamera(cave, runtime, alpha, deltaMs);
 
     const camera = this.scene.cameras.main;
-    const range = visibleTiles(camera.scrollX, camera.scrollY, cave.width, cave.height);
+    const range = visibleTiles(camera.scrollX, camera.scrollY, cave.width, cave.height, viewport());
     let used = 0;
 
     for (let y = range.minY; y <= range.maxY; y += 1) {
@@ -189,7 +197,15 @@ export class WorldRenderer {
       py = arrival.fromY + (arrival.toY - arrival.fromY) * alpha;
     }
 
-    const target = cameraTarget(px, py, cave.width, cave.height, camera.scrollX, camera.scrollY);
+    const target = cameraTarget(
+      px,
+      py,
+      cave.width,
+      cave.height,
+      camera.scrollX,
+      camera.scrollY,
+      viewport(),
+    );
     camera.setScroll(
       approachCamera(camera.scrollX, target.x, deltaMs),
       approachCamera(camera.scrollY, target.y, deltaMs),

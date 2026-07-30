@@ -1,6 +1,8 @@
 import Phaser from 'phaser';
 
-import { GAME_HEIGHT, GAME_WIDTH, SceneKey } from '../../config';
+import { layout } from '../../layout';
+
+import { SceneKey } from '../../config';
 import { audio } from '../audio/index';
 import { generateTextures } from '../render/TextureFactory';
 import { loadSettings } from '../state/settings';
@@ -24,7 +26,7 @@ export class BootScene extends Phaser.Scene {
 
   preload(): void {
     const status = this.add
-      .text(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'CARVING CAVES...', {
+      .text(layout().width / 2, layout().height / 2, 'CARVING CAVES...', {
         fontFamily: FONT,
         fontSize: '16px',
         color: Ink.body,

@@ -1,13 +1,11 @@
 import Phaser from 'phaser';
 
-import { Depth, GAME_WIDTH, HUD_HEIGHT, GAME_HEIGHT, TILE_SIZE, type CavePalette } from '../../config';
+import { Depth, TILE_SIZE, type CavePalette } from '../../config';
+import { layout } from '../../layout';
 import type { Cave } from '../engine/Cave';
 import { Tile } from '../engine/tiles';
 import { TextureKey } from './TextureFactory';
 import { clamp, glowTransform, mixColor, smoothstep, visibleTiles } from './renderMath';
-
-const VIEW_W = GAME_WIDTH;
-const VIEW_H = GAME_HEIGHT - HUD_HEIGHT;
 
 /** Side length of the generated glow texture, in pixels. */
 const GLOW_TEXTURE_SIZE = 32;
@@ -30,11 +28,17 @@ export class LightingLayer {
   private tint = 0x040814;
   private enabled = true;
 
+  /** Size of the darkness sheet, kept in step with the camera viewport. */
+  private viewW: number;
+  private viewH: number;
+
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
+    this.viewW = layout().width;
+    this.viewH = layout().worldHeight;
 
     this.darkness = scene.add
-      .renderTexture(0, 0, VIEW_W, VIEW_H)
+      .renderTexture(0, 0, this.viewW, this.viewH)
       .setOrigin(0, 0)
       .setScrollFactor(0)
       .setDepth(Depth.Lighting);
@@ -54,6 +58,21 @@ export class LightingLayer {
     // ever hiding a boulder about to land on you.
     this.strength = 0.58 + depth * 0.28;
     this.tint = mixColor(palette.background, 0x000000, 0.55);
+  }
+
+  /**
+   * Match the sheet to a new viewport after the window changed shape. The
+   * texture is reallocated rather than scaled, so the lamp keeps its size in
+   * cave cells instead of stretching with the window.
+   */
+  resize(): void {
+    this.viewW = layout().width;
+    this.viewH = layout().worldHeight;
+    // `resize` reallocates the underlying texture; `setSize` would only
+    // stretch the existing one over the new area.
+    this.darkness.resize(this.viewW, this.viewH);
+    this.vignette.clear();
+    this.drawVignette();
   }
 
   setEnabled(enabled: boolean): void {
@@ -102,7 +121,7 @@ export class LightingLayer {
 
     // Cull by the light's own reach: a big lamp whose centre is just off the
     // viewport still lights part of it.
-    if (x < -reach || y < -reach || x > VIEW_W + reach || y > VIEW_H + reach) return;
+    if (x < -reach || y < -reach || x > this.viewW + reach || y > this.viewH + reach) return;
 
     // `erase` has no scale parameter -- it always blits the texture at native
     // size -- so the lamp is stamped instead, which can scale and can centre
@@ -120,10 +139,10 @@ export class LightingLayer {
     const steps = 14;
     for (let i = 0; i < steps; i += 1) {
       const t = i / steps;
-      const inset = t * Math.min(VIEW_W, VIEW_H) * 0.5;
+      const inset = t * Math.min(this.viewW, this.viewH) * 0.5;
       const alpha = smoothstep(0.45, 1, 1 - t) * 0.055;
       this.vignette.lineStyle(Math.max(2, (1 - t) * 12), 0x000000, alpha);
-      this.vignette.strokeRect(inset, inset, VIEW_W - inset * 2, VIEW_H - inset * 2);
+      this.vignette.strokeRect(inset, inset, this.viewW - inset * 2, this.viewH - inset * 2);
     }
   }
 }

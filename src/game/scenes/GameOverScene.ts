@@ -1,6 +1,8 @@
 import Phaser from 'phaser';
 
-import { GAME_HEIGHT, GAME_WIDTH, SceneKey } from '../../config';
+import { layout } from '../../layout';
+
+import { SceneKey } from '../../config';
 import { audio } from '../audio/index';
 import {
   loadHighScores,
@@ -10,7 +12,18 @@ import {
   type ScoreEntry,
 } from '../state/profile';
 import { RUN_STATE_KEY, type RunState } from './RunState';
-import { bodyStyle, centred, Ink, pad, panel, pulse, titleStyle } from './ui';
+import {
+  Ink,
+  bodyStyle,
+  card,
+  centred,
+  designX,
+  designY,
+  pad,
+  pulse,
+  relayoutOnResize,
+  titleStyle,
+} from './ui';
 
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ';
 
@@ -35,6 +48,7 @@ export class GameOverScene extends Phaser.Scene {
   }
 
   async create(): Promise<void> {
+    relayoutOnResize(this);
     // Scene instances outlive a visit; clear per-visit state (see CaveIntroScene).
     this.entering = false;
     this.submitted = false;
@@ -46,11 +60,11 @@ export class GameOverScene extends Phaser.Scene {
     const { session, won } = this.state;
 
     this.cameras.main.setBackgroundColor('#05070f');
-    panel(this, GAME_WIDTH / 2 - 190, 96, 380, 200);
+    card(this, 96, 380, 200);
 
-    centred(this, 142, won ? 'YOU ESCAPED' : 'GAME OVER', titleStyle(won ? 36 : 40));
-    centred(this, 182, `SCORE  ${pad(session.score, 6)}`, bodyStyle(16, Ink.gold));
-    centred(this, 206, `REACHED CAVE ${session.spec.letter}`, bodyStyle(13));
+    centred(this, designY(142), won ? 'YOU ESCAPED' : 'GAME OVER', titleStyle(won ? 36 : 40));
+    centred(this, designY(182), `SCORE  ${pad(session.score, 6)}`, bodyStyle(16, Ink.gold));
+    centred(this, designY(206), `REACHED CAVE ${session.spec.letter}`, bodyStyle(13));
 
     this.input.on(Phaser.Input.Events.POINTER_DOWN, this.onPointer, this);
 
@@ -68,34 +82,33 @@ export class GameOverScene extends Phaser.Scene {
 
   private beginEntry(): void {
     this.entering = true;
-    centred(this, 236, 'NEW BEST RUN -- ENTER INITIALS', bodyStyle(11, Ink.accent));
+    centred(this, designY(236), 'NEW BEST RUN -- ENTER INITIALS', bodyStyle(11, Ink.accent));
 
-    const startX = GAME_WIDTH / 2 - 40;
     this.slotText = this.slots.map((_, index) =>
       this.add
-        .text(startX + index * 40, 268, 'A', { ...titleStyle(30) })
+        .text(designX(-40 + index * 40), designY(268), 'A', { ...titleStyle(30) })
         .setOrigin(0.5),
     );
     this.refreshSlots();
 
-    const hint = centred(this, GAME_HEIGHT - 34, 'ARROWS + ENTER', bodyStyle(11, Ink.dim));
+    const hint = centred(this, layout().height - 34, 'ARROWS + ENTER', bodyStyle(11, Ink.dim));
     pulse(this, hint);
   }
 
   private showTable(scores: readonly ScoreEntry[]): void {
     const rows = scores.slice(0, 5);
     if (rows.length > 0) {
-      centred(this, 236, 'BEST RUNS', bodyStyle(11, Ink.gold));
+      centred(this, designY(236), 'BEST RUNS', bodyStyle(11, Ink.gold));
       rows.forEach((row, index) => {
         centred(
           this,
-          254 + index * 16,
+          designY(254 + index * 16),
           `${index + 1}. ${row.name.padEnd(4)} ${pad(row.score, 6)}  CAVE ${row.caveLetter}`,
           bodyStyle(11, Ink.body),
         );
       });
     }
-    const hint = centred(this, GAME_HEIGHT - 34, 'PRESS ANY KEY', bodyStyle(11, Ink.dim));
+    const hint = centred(this, layout().height - 34, 'PRESS ANY KEY', bodyStyle(11, Ink.dim));
     pulse(this, hint);
   }
 

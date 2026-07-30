@@ -1,13 +1,15 @@
 import Phaser from 'phaser';
 
-import { GAME_HEIGHT, GAME_WIDTH, SceneKey } from '../../config';
+import { layout } from '../../layout';
+
+import { SceneKey } from '../../config';
 import { audio } from '../audio/index';
 import { CAVE_COUNT } from '../levels/index';
 import { loadHighScores, type ScoreEntry } from '../state/profile';
 import { saveSettings } from '../state/settings';
 import { POSTER_KEY } from './BootScene';
 import { RUN_STATE_KEY, type RunState } from './RunState';
-import { bodyStyle, centred, Ink, pad, panel, pulse, titleStyle } from './ui';
+import { Ink, bodyStyle, card, centred, designX, designY, pad, pulse, relayoutOnResize, titleStyle } from './ui';
 
 interface MenuItem {
   readonly label: () => string;
@@ -37,6 +39,7 @@ export class TitleScene extends Phaser.Scene {
   }
 
   async create(): Promise<void> {
+    relayoutOnResize(this);
     // Per-visit state; `unlocked` is deliberately sticky, because the audio
     // context is a page-lifetime singleton and stays unlocked once granted.
     this.cursor = 0;
@@ -45,12 +48,12 @@ export class TitleScene extends Phaser.Scene {
     this.state = this.registry.get(RUN_STATE_KEY) as RunState;
     this.drawBackdrop();
 
-    centred(this, 74, 'CAVERN RUN', titleStyle(46)).setLetterSpacing?.(2);
-    centred(this, 112, `${CAVE_COUNT} CAVES.  ONE WAY OUT.`, bodyStyle(13, Ink.accent));
+    centred(this, designY(74), 'CAVERN RUN', titleStyle(46)).setLetterSpacing?.(2);
+    centred(this, designY(112), `${CAVE_COUNT} CAVES.  ONE WAY OUT.`, bodyStyle(13, Ink.accent));
 
     this.buildMenu();
 
-    this.prompt = centred(this, GAME_HEIGHT - 26, 'PRESS ANY KEY', bodyStyle(12, Ink.dim));
+    this.prompt = centred(this, layout().height - 26, 'PRESS ANY KEY', bodyStyle(12, Ink.dim));
     pulse(this, this.prompt);
 
     this.input.keyboard?.on('keydown', this.onKey, this);
@@ -65,8 +68,8 @@ export class TitleScene extends Phaser.Scene {
       // The poster carries its own title lettering on the left, which would
       // fight the real one. Zooming in and anchoring right crops that off and
       // keeps the part worth showing: the cavern and the crystal seams.
-      const poster = this.add.image(GAME_WIDTH, GAME_HEIGHT / 2, POSTER_KEY).setOrigin(1, 0.5);
-      const cover = Math.max(GAME_WIDTH / poster.width, GAME_HEIGHT / poster.height);
+      const poster = this.add.image(layout().width, layout().height / 2, POSTER_KEY).setOrigin(1, 0.5);
+      const cover = Math.max(layout().width / poster.width, layout().height / poster.height);
       poster.setScale(cover * 1.7).setAlpha(0.6);
     } else {
       this.cameras.main.setBackgroundColor('#070c18');
@@ -75,7 +78,7 @@ export class TitleScene extends Phaser.Scene {
     // Darken toward the bottom so the menu stays readable over the art.
     const shade = this.add.graphics();
     shade.fillStyle(0x04060e, 0.72);
-    shade.fillRect(0, GAME_HEIGHT * 0.34, GAME_WIDTH, GAME_HEIGHT * 0.66);
+    shade.fillRect(0, layout().height * 0.34, layout().width, layout().height * 0.66);
   }
 
   private buildMenu(): void {
@@ -112,11 +115,12 @@ export class TitleScene extends Phaser.Scene {
       },
     ];
 
-    const top = 152;
-    panel(this, GAME_WIDTH / 2 - 168, top - 16, 336, this.items.length * 24 + 24);
+    card(this, 152 - 16, 336, this.items.length * 24 + 24);
 
     this.labels = this.items.map((item, index) =>
-      this.add.text(GAME_WIDTH / 2 - 148, top + index * 24, item.label(), bodyStyle(14)).setOrigin(0, 0.5),
+      this.add
+        .text(designX(-148), designY(152 + index * 24), item.label(), bodyStyle(14))
+        .setOrigin(0, 0.5),
     );
     this.refresh();
   }
@@ -124,15 +128,18 @@ export class TitleScene extends Phaser.Scene {
   private drawScores(): void {
     if (this.scores.length === 0) return;
 
-    const top = 290;
     const rows = this.scores.slice(0, 5);
-    panel(this, GAME_WIDTH / 2 - 168, top - 20, 336, rows.length * 18 + 34);
+    card(this, 290 - 20, 336, rows.length * 18 + 34);
 
-    this.add.text(GAME_WIDTH / 2 - 148, top - 6, 'BEST RUNS', bodyStyle(11, Ink.gold)).setOrigin(0, 0.5);
+    this.add
+      .text(designX(-148), designY(290 - 6), 'BEST RUNS', bodyStyle(11, Ink.gold))
+      .setOrigin(0, 0.5);
 
     rows.forEach((row, index) => {
       const line = `${index + 1}. ${row.name.padEnd(4)} ${pad(row.score, 6)}   CAVE ${row.caveLetter}`;
-      this.add.text(GAME_WIDTH / 2 - 148, top + 14 + index * 18, line, bodyStyle(12, Ink.body)).setOrigin(0, 0.5);
+      this.add
+        .text(designX(-148), designY(290 + 14 + index * 18), line, bodyStyle(12, Ink.body))
+        .setOrigin(0, 0.5);
     });
   }
 
