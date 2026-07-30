@@ -9,7 +9,7 @@ export const caveC: CaveSpec = {
   name: 'The Gallery',
   paletteId: 'glacier',
   hint: 'Every vault has a door. Find it before the clock does.',
-  diamondsRequired: 15,
+  diamondsRequired: 17,
   diamondValue: 10,
   extraDiamondValue: 25,
   timeLimit: 150,

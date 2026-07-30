@@ -9,7 +9,7 @@ export const caveF: CaveSpec = {
   name: 'Crush Depth',
   paletteId: 'ember',
   hint: 'A falling boulder settles an argument with a firefly.',
-  diamondsRequired: 16,
+  diamondsRequired: 18,
   diamondValue: 12,
   extraDiamondValue: 30,
   timeLimit: 135,

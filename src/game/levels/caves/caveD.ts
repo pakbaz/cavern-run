@@ -9,7 +9,7 @@ export const caveD: CaveSpec = {
   name: 'Pushing Through',
   paletteId: 'ember',
   hint: 'Walk into a boulder with space behind it and it gives way.',
-  diamondsRequired: 14,
+  diamondsRequired: 15,
   diamondValue: 12,
   extraDiamondValue: 30,
   timeLimit: 140,
