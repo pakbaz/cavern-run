@@ -96,6 +96,21 @@ describe('validateCave', () => {
     expect(validateCave({ ...good, diamondsRequired: 5000 }).join()).toContain('quota of 5000');
   });
 
+  it('will not count on an amoeba with more room than it can fill', () => {
+    // An amoeba only turns to diamonds once it has run out of space. Give it a
+    // chamber bigger than amoebaMaxSize and it hits its ceiling and turns to
+    // stone instead, so it must earn the cave no credit at all. Cave O once
+    // shipped a quota that only an over-sized amoeba could have met.
+    const map = [...good.map.map((row) => row.replace(/d/g, '.'))];
+    map[10] = `${map[10].slice(0, 20)}a${map[10].slice(21)}`;
+
+    const roomy = validateCave({ ...good, map, diamondsRequired: 10, amoebaMaxSize: 8 });
+    expect(roomy.join()).toContain('quota of 10');
+
+    const boxed = validateCave({ ...good, map, diamondsRequired: 10, amoebaMaxSize: 5000 });
+    expect(boxed).toEqual([]);
+  });
+
   it('rejects an unknown map character', () => {
     const map = [...good.map];
     map[5] = `W${'?'.repeat(CAVE_WIDTH - 2)}W`;
