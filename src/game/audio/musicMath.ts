@@ -295,6 +295,31 @@ function motifSlot(theme: CaveTheme, beat: number): number {
   return slot < 0 ? 0 : slot;
 }
 
+function melodicContour(theme: CaveTheme, bar: number, beat: number, slot: number, phase: Phase): number {
+  const cell = theme.motif;
+  const base = cell[slot % cell.length];
+  const step = (slot + bar) % 2;
+
+  let contour = base;
+  switch (bar % 4) {
+    case 0:
+      contour = base + (beat > 8 ? 1 : 0);
+      break;
+    case 1:
+      contour = base + 1 + step;
+      break;
+    case 2:
+      contour = base - (step === 0 ? 1 : 0);
+      break;
+    default:
+      contour = base + (slot >= 2 ? -1 : 1) + (phase >= 2 ? 1 : 0);
+      break;
+  }
+
+  if (phase >= 3) contour += 1;
+  return clamp(contour, -2, 5);
+}
+
 /**
  * The melody.
  *
@@ -308,32 +333,13 @@ export function leadDegree(step: number, theme: CaveTheme, phase: Phase): number
   const bars = theme.progression.length;
   const bar = barOf(step, theme);
 
-  const cell = theme.motif;
-  const slot = motifSlot(theme, beatOf(step));
-  const last = slot === cell.length - 1;
+  const beat = beatOf(step);
+  const slot = motifSlot(theme, beat);
+  const contour = melodicContour(theme, bar, beat, slot, phase);
 
-  let note: number;
-  switch (bar % 4) {
-    case 0:
-      note = cell[slot % cell.length];
-      break;
-    case 1:
-      // Sequence: the same shape, a step up the scale.
-      note = cell[(slot + 1) % cell.length] + 1;
-      break;
-    case 2:
-      // Inversion: the shape turned on its head around the third.
-      note = 2 - cell[slot % cell.length];
-      break;
-    default:
-      // Turnaround: sequenced up a third, then pulled back down to close.
-      note = cell[(slot + 2) % cell.length] + (last ? -1 : 2);
-      break;
-  }
-
-  // An octave up for the endgame, and for the unresolved final bar before it.
-  const lift = phase >= 3 ? 7 : phase >= 2 && bar === bars - 1 ? 7 : 0;
-  return chordDegree(step, theme, phase) + 14 + note + lift;
+  // A slightly lower register makes the lead feel more singable and less harsh.
+  const lift = phase >= 3 ? 5 : phase >= 2 && bar === bars - 1 ? 4 : 0;
+  return chordDegree(step, theme, phase) + 10 + contour + lift;
 }
 
 /**
@@ -345,11 +351,11 @@ export function leadPlays(step: number, intensity: number, theme: CaveTheme): bo
   const beat = beatOf(step);
   const slot = theme.rhythm.indexOf(beat);
 
-  if (slot < 0) return intensity >= 0.72 && beat % 4 === 2;
-  // Calm caves only state the call, and only every other bar.
-  if (intensity < 0.25) return bar % 2 === 0 && slot % 2 === 0;
-  if (intensity < 0.5) return bar % 2 === 0 || slot % 2 === 0;
-  return true;
+  if (slot >= 0) return intensity >= 0.1 && (intensity >= 0.45 || slot === 0 || slot === theme.rhythm.length - 1);
+  if (beat % 8 === 0) return intensity >= 0.72;
+  if (intensity < 0.2) return bar % 2 === 0 && slot % 2 === 0;
+  if (intensity < 0.5) return slot % 2 === 0;
+  return slot === 0 || slot === theme.rhythm.length - 1 || beat % 8 === 0;
 }
 
 /** The counter-line that runs under the melody once a cave gets going. */
