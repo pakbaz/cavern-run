@@ -9,7 +9,7 @@ export const caveA: CaveSpec = {
   name: 'First Descent',
   paletteId: 'glacier',
   hint: 'Dig for diamonds. Mind what falls.',
-  diamondsRequired: 12,
+  diamondsRequired: 13,
   diamondValue: 10,
   extraDiamondValue: 25,
   timeLimit: 150,

@@ -9,7 +9,7 @@ export const caveB: CaveSpec = {
   name: 'Rockfall',
   paletteId: 'glacier',
   hint: 'Boulders roll off round edges. Never stand below one.',
-  diamondsRequired: 12,
+  diamondsRequired: 13,
   diamondValue: 10,
   extraDiamondValue: 25,
   timeLimit: 145,

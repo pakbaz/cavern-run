@@ -9,7 +9,7 @@ export const caveE: CaveSpec = {
   name: 'Firefly Warren',
   paletteId: 'ember',
   hint: 'Fireflies hug the wall on their left. Learn the loop.',
-  diamondsRequired: 15,
+  diamondsRequired: 17,
   diamondValue: 12,
   extraDiamondValue: 30,
   timeLimit: 140,
