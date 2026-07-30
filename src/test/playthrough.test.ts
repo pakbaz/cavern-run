@@ -21,7 +21,7 @@ import { canReach, playCave } from './bot';
  * avoids danger cannot do it.
  */
 
-const STRAIGHTFORWARD = ['A', 'B', 'C', 'D', 'E', 'F'] as const;
+const STRAIGHTFORWARD = ['A', 'B', 'C', 'D', 'E', 'F', 'L'] as const;
 
 describe('playing the caves', () => {
   for (const letter of STRAIGHTFORWARD) {

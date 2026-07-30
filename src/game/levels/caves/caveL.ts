@@ -37,7 +37,7 @@ export const caveL: CaveSpec = {
     'W...          .W.wwwwwwwwwwwwwwwwwwwwrdW',
     'W...          .W....d...r...d.........rW',
     'W...          .W.d....................rW',
-    'W..................r...............d...W',
+    'W..................r..............dd...W',
     'W.P..r.........W.................d...E.W',
     'WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW',
   ],
