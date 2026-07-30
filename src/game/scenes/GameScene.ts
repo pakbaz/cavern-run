@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 
-import { GAME_HEIGHT, GAME_WIDTH, SceneKey, WORLD_OFFSET_Y } from '../../config';
+import { SceneKey, WORLD_OFFSET_Y } from '../../config';
+import { layout } from '../../layout';
 import { audio } from '../audio/index';
 import { CaveOutcome } from '../engine/simTypes';
 import { InputManager } from '../input/InputManager';
@@ -8,6 +9,7 @@ import { CAVE_COUNT } from '../levels/index';
 import { RenderLayer } from '../render/index';
 import { recordCaveBest, saveProgress } from '../state/profile';
 import { RUN_STATE_KEY, type RunState } from './RunState';
+import { onLayoutChanged } from './ui';
 
 /**
  * The cave itself.
@@ -37,9 +39,7 @@ export class GameScene extends Phaser.Scene {
     this.state = this.registry.get(RUN_STATE_KEY) as RunState;
     const { session, settings } = this.state;
 
-    // The playfield sits below the status bar, so the world camera is inset
-    // rather than the world being pushed down.
-    this.cameras.main.setViewport(0, WORLD_OFFSET_Y, GAME_WIDTH, GAME_HEIGHT - WORLD_OFFSET_Y);
+    this.applyViewport();
     this.cameras.main.setBackgroundColor('#05070f');
 
     this.render = new RenderLayer(this, {
@@ -55,7 +55,21 @@ export class GameScene extends Phaser.Scene {
     this.scene.launch(SceneKey.Hud);
     audio().music.start(session.caveIndex, CAVE_COUNT);
 
+    // Unlike the menus, this scene rebuilds in place: restarting it mid-cave
+    // would restart the music and throw away the camera's position for what is
+    // only a change of window shape.
+    onLayoutChanged(this, () => {
+      this.applyViewport();
+      this.render.resize();
+    });
+
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.teardown, this);
+  }
+
+  /** Inset the world camera below the status bar, at the current size. */
+  private applyViewport(): void {
+    const { width, worldHeight } = layout();
+    this.cameras.main.setViewport(0, WORLD_OFFSET_Y, width, worldHeight);
   }
 
   override update(_time: number, delta: number): void {

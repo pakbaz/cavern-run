@@ -29,12 +29,21 @@ Then open the address Vite prints (http://localhost:5173 by default).
 | Action | Keyboard | Gamepad | Touch |
 | --- | --- | --- | --- |
 | Move / dig | Arrow keys or WASD | D-pad or left stick | Swipe or hold |
-| Grab without moving | Shift or Ctrl | A / B / shoulder | Second finger |
+| Grab without moving | Shift or Ctrl | A / B / shoulder | Hold one finger, swipe another |
+| Confirm | Enter or Space | A | Tap |
 | Pause | Esc or P | Start | &mdash; |
 | Restart cave | R | &mdash; | &mdash; |
 
 **Grab** scoops the dirt next to you without stepping into the gap. It is the
 difference between clearing the ground under a boulder and being under it.
+
+On touch, keep one finger planted and swipe a second one to grab in that
+direction. Either finger can be the one that moves, so it works whichever
+hand you hold the phone in.
+
+The view adapts to the screen: a phone in portrait sees a tall, narrow slice
+of the cave, the same phone on its side sees a wide, short one, and a desktop
+sees more of both. Rotating mid-cave keeps the run going.
 
 ## The rules
 
@@ -77,7 +86,7 @@ TypeScript, [Phaser 4](https://github.com/phaserjs/phaser), Vite and Vitest.
 
 ```bash
 npm run build       # typecheck, then bundle to dist/
-npm test            # 225 unit tests
+npm test            # 247 unit tests
 npm run typecheck   # types only
 ```
 

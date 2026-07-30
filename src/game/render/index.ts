@@ -51,6 +51,11 @@ export class RenderLayer {
     this.effects.setReducedMotion(options.reducedMotion);
   }
 
+  /** Rebuild anything sized to the window after it changed shape. */
+  resize(): void {
+    this.lighting.resize();
+  }
+
   setCave(spec: CaveSpec, cave: Cave, caveIndex: number): void {
     this.world.setCave(spec, cave);
     this.lighting.setPalette(this.world.activePalette, caveIndex, CAVES.length);

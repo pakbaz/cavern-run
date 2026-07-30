@@ -2,9 +2,9 @@ import Phaser from 'phaser';
 
 import { Dir, type Direction } from '../engine/tiles';
 import type { PlayerInput } from '../engine/simTypes';
-import { DirectionLatch, stickDirection, swipeDirection } from './inputMath';
+import { DirectionLatch, stickDirection, touchCommand, type TouchDrag } from './inputMath';
 
-export { DirectionLatch, stickDirection, swipeDirection } from './inputMath';
+export { DirectionLatch, stickDirection, swipeDirection, touchCommand } from './inputMath';
 
 /** Keyboard bindings, listed so the README and the settings screen agree. */
 const DIRECTION_KEYS: ReadonlyArray<readonly [string, Direction]> = [
@@ -22,6 +22,9 @@ const GRAB_KEYS = new Set(['ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRig
 const PAUSE_KEYS = new Set(['Escape', 'KeyP']);
 const RESTART_KEYS = new Set(['KeyR']);
 const CONFIRM_KEYS = new Set(['Enter', 'Space', 'NumpadEnter']);
+
+/** Travel, in pixels, beyond which a touch stops counting as a tap. */
+const TAP_SLOP = 12;
 
 /** Gamepad face/shoulder buttons that act as grab. */
 const GAMEPAD_GRAB_BUTTONS = [0, 2, 4, 5, 6, 7];
@@ -45,11 +48,16 @@ export class InputManager {
   private restartPressed = false;
   private confirmPressed = false;
 
-  private touchId: number | null = null;
-  private touchOriginX = 0;
-  private touchOriginY = 0;
-  private touchDir: Direction | null = null;
-  private touchGrab = false;
+  /**
+   * Every finger currently on the glass, in the order they landed, with where
+   * each one started. Tracking all of them is what makes the two-finger grab
+   * possible; the first one alone is an ordinary swipe.
+   */
+  private readonly touches = new Map<number, { originX: number; originY: number; x: number; y: number }>();
+
+  /** The finger that landed first, which is the one a tap is judged by. */
+  private primaryTouch: number | null = null;
+  private primaryMoved = false;
 
   private readonly onKeyDown: (event: KeyboardEvent) => void;
   private readonly onKeyUp: (event: KeyboardEvent) => void;
@@ -81,10 +89,21 @@ export class InputManager {
   /** The input to feed the next simulation scan. */
   sample(): PlayerInput {
     const pad = this.readGamepad();
+    const touch = this.readTouch();
     return {
-      dir: pad.dir ?? this.touchDir ?? this.latch.resolve(),
-      grab: this.keyboardGrab || this.touchGrab || pad.grab,
+      dir: pad.dir ?? touch.dir ?? this.latch.resolve(),
+      grab: this.keyboardGrab || touch.grab || pad.grab,
     };
+  }
+
+  private readTouch(): { dir: Direction | null; grab: boolean } {
+    if (this.touches.size === 0) return { dir: null, grab: false };
+
+    const drags: TouchDrag[] = [];
+    for (const [id, touch] of this.touches) {
+      drags.push({ id, dx: touch.x - touch.originX, dy: touch.y - touch.originY });
+    }
+    return touchCommand(drags);
   }
 
   /** Tell the latch a scan has been consumed, so buffered taps expire. */
@@ -115,9 +134,9 @@ export class InputManager {
   reset(): void {
     this.latch.clear();
     this.keyboardGrab = false;
-    this.touchId = null;
-    this.touchDir = null;
-    this.touchGrab = false;
+    this.touches.clear();
+    this.primaryTouch = null;
+    this.primaryMoved = false;
   }
 
   destroy(): void {
@@ -186,32 +205,45 @@ export class InputManager {
   }
 
   private handlePointerDown(pointer: Phaser.Input.Pointer): void {
-    if (this.touchId !== null) {
-      // A second finger anywhere on screen is the grab modifier.
-      this.touchGrab = true;
-      return;
+    this.touches.set(pointer.id, {
+      originX: pointer.x,
+      originY: pointer.y,
+      x: pointer.x,
+      y: pointer.y,
+    });
+
+    if (this.primaryTouch === null) {
+      this.primaryTouch = pointer.id;
+      this.primaryMoved = false;
     }
-    this.touchId = pointer.id;
-    this.touchOriginX = pointer.x;
-    this.touchOriginY = pointer.y;
-    this.touchDir = null;
   }
 
   private handlePointerMove(pointer: Phaser.Input.Pointer): void {
-    if (pointer.id !== this.touchId || !pointer.isDown) return;
-    this.touchDir = swipeDirection(pointer.x - this.touchOriginX, pointer.y - this.touchOriginY);
+    const touch = this.touches.get(pointer.id);
+    if (!touch || !pointer.isDown) return;
+
+    touch.x = pointer.x;
+    touch.y = pointer.y;
+
+    if (pointer.id === this.primaryTouch && !this.primaryMoved) {
+      const travelled = Math.abs(pointer.x - touch.originX) + Math.abs(pointer.y - touch.originY);
+      if (travelled >= TAP_SLOP) this.primaryMoved = true;
+    }
   }
 
   private handlePointerUp(pointer: Phaser.Input.Pointer): void {
-    if (pointer.id !== this.touchId) {
-      this.touchGrab = false;
-      return;
-    }
-    // A tap that never became a swipe is a confirm, which is how the touch
-    // player gets through the title and cave-intro screens.
-    if (this.touchDir === null) this.confirmPressed = true;
-    this.touchId = null;
-    this.touchDir = null;
-    this.touchGrab = false;
+    this.touches.delete(pointer.id);
+
+    if (pointer.id !== this.primaryTouch) return;
+
+    // A tap that never travelled is a confirm, which is how the touch player
+    // gets through the title and cave-intro screens. Lifting a finger that was
+    // part of a two-finger grab is not a tap, so the gesture cannot leak into
+    // the menus underneath.
+    if (!this.primaryMoved && this.touches.size === 0) this.confirmPressed = true;
+
+    // Whichever finger is left becomes the one a tap would be judged by.
+    this.primaryTouch = this.touches.keys().next().value ?? null;
+    this.primaryMoved = this.primaryTouch !== null;
   }
 }

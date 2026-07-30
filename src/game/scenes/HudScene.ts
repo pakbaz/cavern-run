@@ -1,8 +1,9 @@
 import Phaser from 'phaser';
 
+import { layout } from '../../layout';
+
 import {
   Depth,
-  GAME_WIDTH,
   HUD_HEIGHT,
   SceneKey,
   TIME_CRITICAL_SECONDS,
@@ -10,7 +11,7 @@ import {
 } from '../../config';
 import { TextureKey } from '../render/TextureFactory';
 import { RUN_STATE_KEY, type RunState } from './RunState';
-import { bodyStyle, FONT, Ink, pad } from './ui';
+import { bodyStyle, FONT, Ink, pad, relayoutOnResize } from './ui';
 
 /**
  * The status bar: diamonds needed, time, score and lives.
@@ -33,23 +34,30 @@ export class HudScene extends Phaser.Scene {
   }
 
   create(): void {
+    relayoutOnResize(this);
+    // The HUD is re-launched for every cave and rebuilt on rotation, and the
+    // scene instance outlives both. Phaser destroys the old game objects, but
+    // the array still holds them, so without this the row of spare-life heads
+    // would grow by nine each visit and `syncLives` would be toggling the
+    // dead ones from the previous cave.
+    this.lives = [];
     this.state = this.registry.get(RUN_STATE_KEY) as RunState;
 
     const bar = this.add.graphics().setDepth(Depth.Hud);
     bar.fillStyle(0x080d18, 0.96);
-    bar.fillRect(0, 0, GAME_WIDTH, HUD_HEIGHT);
+    bar.fillRect(0, 0, layout().width, HUD_HEIGHT);
     bar.lineStyle(2, 0x1d2b40, 1);
-    bar.lineBetween(0, HUD_HEIGHT, GAME_WIDTH, HUD_HEIGHT);
+    bar.lineBetween(0, HUD_HEIGHT, layout().width, HUD_HEIGHT);
 
     const mid = HUD_HEIGHT / 2;
 
     this.add.image(16, mid, TextureKey.diamond(0)).setScale(0.55).setDepth(Depth.Hud);
     this.quota = this.text(30, mid, '0/0', Ink.bright).setDepth(Depth.Hud);
 
-    this.caveLabel = this.text(GAME_WIDTH / 2, mid, '', Ink.accent).setOrigin(0.5, 0.5).setDepth(Depth.Hud);
+    this.caveLabel = this.text(layout().width / 2, mid, '', Ink.accent).setOrigin(0.5, 0.5).setDepth(Depth.Hud);
 
-    this.timer = this.text(GAME_WIDTH - 12, mid, '000', Ink.bright).setOrigin(1, 0.5).setDepth(Depth.Hud);
-    this.score = this.text(GAME_WIDTH - 74, mid, '000000', Ink.gold).setOrigin(1, 0.5).setDepth(Depth.Hud);
+    this.timer = this.text(layout().width - 12, mid, '000', Ink.bright).setOrigin(1, 0.5).setDepth(Depth.Hud);
+    this.score = this.text(layout().width - 74, mid, '000000', Ink.gold).setOrigin(1, 0.5).setDepth(Depth.Hud);
 
     this.buildLives();
   }

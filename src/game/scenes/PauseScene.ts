@@ -1,9 +1,11 @@
 import Phaser from 'phaser';
 
-import { GAME_HEIGHT, GAME_WIDTH, SceneKey } from '../../config';
+import { layout } from '../../layout';
+
+import { SceneKey } from '../../config';
 import { audio } from '../audio/index';
 import { RUN_STATE_KEY, type RunState } from './RunState';
-import { bodyStyle, centred, Ink, panel, titleStyle } from './ui';
+import { Ink, bodyStyle, card, centred, designY, relayoutOnResize, titleStyle } from './ui';
 
 /** Overlay drawn on top of the frozen cave. */
 export class PauseScene extends Phaser.Scene {
@@ -14,17 +16,18 @@ export class PauseScene extends Phaser.Scene {
   }
 
   create(): void {
+    relayoutOnResize(this);
     this.state = this.registry.get(RUN_STATE_KEY) as RunState;
 
     const shade = this.add.graphics();
     shade.fillStyle(0x03050c, 0.78);
-    shade.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+    shade.fillRect(0, 0, layout().width, layout().height);
 
-    panel(this, GAME_WIDTH / 2 - 160, 130, 320, 150);
-    centred(this, 172, 'PAUSED', titleStyle(34));
-    centred(this, 214, 'ESC  RESUME', bodyStyle(13));
-    centred(this, 236, 'R    RESTART CAVE (COSTS A LIFE)', bodyStyle(11, Ink.dim));
-    centred(this, 258, 'Q    ABANDON RUN', bodyStyle(11, Ink.dim));
+    card(this, 130, 320, 150);
+    centred(this, designY(172), 'PAUSED', titleStyle(34));
+    centred(this, designY(214), 'ESC  RESUME', bodyStyle(13));
+    centred(this, designY(236), 'R    RESTART CAVE (COSTS A LIFE)', bodyStyle(11, Ink.dim));
+    centred(this, designY(258), 'Q    ABANDON RUN', bodyStyle(11, Ink.dim));
 
     this.input.keyboard?.on('keydown', this.onKey, this);
     this.input.on(Phaser.Input.Events.POINTER_DOWN, this.resume, this);

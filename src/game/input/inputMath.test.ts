@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { Dir } from '../engine/tiles';
-import { DirectionLatch, stickDirection, swipeDirection } from './inputMath';
+import { DirectionLatch, stickDirection, swipeDirection, touchCommand } from './inputMath';
 
 describe('DirectionLatch', () => {
   it('starts idle', () => {
@@ -120,5 +120,74 @@ describe('swipeDirection', () => {
 
   it('never returns a diagonal', () => {
     expect(swipeDirection(50, 50)).toBe(Dir.Down);
+  });
+});
+
+describe('touchCommand', () => {
+  const still = (id: number) => ({ id, dx: 0, dy: 0 });
+
+  it('does nothing with no fingers down', () => {
+    expect(touchCommand([])).toEqual({ dir: null, grab: false });
+  });
+
+  it('walks on a one-finger swipe', () => {
+    expect(touchCommand([{ id: 1, dx: 40, dy: 2 }])).toEqual({ dir: Dir.Right, grab: false });
+    expect(touchCommand([{ id: 1, dx: -3, dy: -40 }])).toEqual({ dir: Dir.Up, grab: false });
+  });
+
+  it('ignores a one-finger tap that never travelled', () => {
+    expect(touchCommand([still(1)])).toEqual({ dir: null, grab: false });
+  });
+
+  it('grabs when a second finger is held and the other swipes', () => {
+    // The classic reason to do this: clear the dirt beside you without
+    // stepping into the gap you just made.
+    expect(touchCommand([still(1), { id: 2, dx: 0, dy: 40 }])).toEqual({
+      dir: Dir.Down,
+      grab: true,
+    });
+  });
+
+  it('does not care which finger is the anchor', () => {
+    const held = still(1);
+    const swiped = { id: 2, dx: -40, dy: 0 };
+
+    // Same gesture, fingers reported in either order, and either one can be
+    // the one that moves: a left-handed player does this the other way round.
+    expect(touchCommand([held, swiped])).toEqual({ dir: Dir.Left, grab: true });
+    expect(touchCommand([swiped, held])).toEqual({ dir: Dir.Left, grab: true });
+    expect(touchCommand([{ id: 1, dx: -40, dy: 0 }, still(2)])).toEqual({
+      dir: Dir.Left,
+      grab: true,
+    });
+  });
+
+  it('takes the direction from the finger that moved furthest', () => {
+    // Anchors drift a little under a resting finger; that drift must not win.
+    const drifting = { id: 1, dx: 6, dy: -4 };
+    const swiped = { id: 2, dx: 0, dy: 44 };
+
+    expect(touchCommand([drifting, swiped]).dir).toBe(Dir.Down);
+  });
+
+  it('still grabs while the swiping finger is below the threshold', () => {
+    // Two fingers down is already the intent to grab, so the modifier holds
+    // even before the swipe is long enough to name a direction.
+    expect(touchCommand([still(1), { id: 2, dx: 5, dy: 0 }])).toEqual({
+      dir: null,
+      grab: true,
+    });
+  });
+
+  it('keeps grabbing with three fingers down', () => {
+    expect(touchCommand([still(1), still(2), { id: 3, dx: 40, dy: 0 }])).toEqual({
+      dir: Dir.Right,
+      grab: true,
+    });
+  });
+
+  it('honours a custom threshold', () => {
+    expect(touchCommand([{ id: 1, dx: 12, dy: 0 }], 8).dir).toBe(Dir.Right);
+    expect(touchCommand([{ id: 1, dx: 12, dy: 0 }], 30).dir).toBe(null);
   });
 });

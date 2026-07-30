@@ -76,3 +76,51 @@ export function swipeDirection(dx: number, dy: number, threshold = 24): Directio
   if (Math.abs(dx) > Math.abs(dy)) return dx > 0 ? Dir.Right : Dir.Left;
   return dy > 0 ? Dir.Down : Dir.Up;
 }
+
+/** One finger on the glass, and how far it has travelled since it landed. */
+export interface TouchDrag {
+  readonly id: number;
+  readonly dx: number;
+  readonly dy: number;
+}
+
+/** What the fingers currently on screen are asking the miner to do. */
+export interface TouchCommand {
+  readonly dir: Direction | null;
+  readonly grab: boolean;
+}
+
+const NO_TOUCH: TouchCommand = { dir: null, grab: false };
+
+/**
+ * Fold the fingers on screen into a single instruction.
+ *
+ * One finger swipes the miner around. Holding a second finger down turns the
+ * gesture into a grab, which scoops the neighbouring cell without stepping
+ * into it -- the touch equivalent of holding shift, and the only way to clear
+ * the ground under a boulder without ending up beneath it.
+ *
+ * Which finger is the anchor and which one swipes is deliberately not fixed:
+ * the direction comes from whichever has moved furthest. Asking players to
+ * plant a specific finger first would be a rule they cannot see and would get
+ * wrong under pressure, and left-handed and right-handed players naturally
+ * do this the opposite way round.
+ */
+export function touchCommand(drags: readonly TouchDrag[], threshold = 24): TouchCommand {
+  if (drags.length === 0) return NO_TOUCH;
+
+  let furthest = drags[0];
+  let best = -1;
+  for (const drag of drags) {
+    const distance = Math.abs(drag.dx) + Math.abs(drag.dy);
+    if (distance > best) {
+      best = distance;
+      furthest = drag;
+    }
+  }
+
+  return {
+    dir: swipeDirection(furthest.dx, furthest.dy, threshold),
+    grab: drags.length > 1,
+  };
+}
