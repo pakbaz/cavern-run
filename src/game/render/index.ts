@@ -30,7 +30,16 @@ export class RenderLayer {
   readonly lighting: LightingLayer;
   readonly effects: EffectsDirector;
 
+  /**
+   * Phaser 4 deprecates the Canvas renderer, and the lamp is built out of
+   * `erase` compositing that only behaves under WebGL. On the rare machine
+   * that falls back to Canvas we drop the lighting rather than draw a black
+   * rectangle over the cave.
+   */
+  private readonly lightingSupported: boolean;
+
   constructor(scene: Phaser.Scene, options: RenderOptions) {
+    this.lightingSupported = scene.game.renderer.type === Phaser.WEBGL;
     this.world = new WorldRenderer(scene);
     this.lighting = new LightingLayer(scene);
     this.effects = new EffectsDirector(scene);
@@ -38,7 +47,7 @@ export class RenderLayer {
   }
 
   applyOptions(options: RenderOptions): void {
-    this.lighting.setEnabled(options.lighting);
+    this.lighting.setEnabled(options.lighting && this.lightingSupported);
     this.effects.setReducedMotion(options.reducedMotion);
   }
 

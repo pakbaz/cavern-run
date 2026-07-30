@@ -36,6 +36,10 @@ export class LightingLayer {
       .setScrollFactor(0)
       .setDepth(Depth.Lighting);
 
+    // Phaser 4 buffers draw commands instead of executing them immediately, so
+    // the sheet is rebuilt and flushed once per frame at the end of `draw()`.
+    this.darkness.setRenderMode('render');
+
     this.vignette = scene.add.graphics().setScrollFactor(0).setDepth(Depth.Vignette);
     this.drawVignette();
   }
@@ -77,6 +81,9 @@ export class LightingLayer {
         );
       }
     }
+
+    // Execute the buffered clear/fill/erase commands for this frame.
+    this.darkness.render();
   }
 
   destroy(): void {
