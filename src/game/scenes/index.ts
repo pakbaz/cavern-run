@@ -1,25 +1,32 @@
-import Phaser from 'phaser';
+import type Phaser from 'phaser';
 
-import { GAME_HEIGHT, GAME_WIDTH, SceneKey } from '../../config';
+import { BootScene } from './BootScene';
+import { CaveCompleteScene } from './CaveCompleteScene';
+import { CaveIntroScene } from './CaveIntroScene';
+import { GameOverScene } from './GameOverScene';
+import { GameScene } from './GameScene';
+import { HudScene } from './HudScene';
+import { PauseScene } from './PauseScene';
+import { TitleScene } from './TitleScene';
 
-/**
- * Temporary placeholder so the project builds and runs while the real scene
- * shell is assembled. Replaced by BootScene/TitleScene/GameScene et al.
- */
-export class PlaceholderScene extends Phaser.Scene {
-  constructor() {
-    super(SceneKey.Boot);
-  }
+export { BootScene } from './BootScene';
+export { TitleScene } from './TitleScene';
+export { CaveIntroScene } from './CaveIntroScene';
+export { GameScene } from './GameScene';
+export { HudScene } from './HudScene';
+export { PauseScene } from './PauseScene';
+export { CaveCompleteScene } from './CaveCompleteScene';
+export { GameOverScene } from './GameOverScene';
+export { RunState, RUN_STATE_KEY } from './RunState';
 
-  create(): void {
-    this.add
-      .text(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'CAVERN RUN', {
-        fontFamily: 'monospace',
-        fontSize: '28px',
-        color: '#cfe4ff',
-      })
-      .setOrigin(0.5);
-  }
-}
-
-export const SCENE_LIST: Array<new () => Phaser.Scene> = [PlaceholderScene];
+/** Boot runs first; the rest are started explicitly. */
+export const SCENE_LIST: Array<new () => Phaser.Scene> = [
+  BootScene,
+  TitleScene,
+  CaveIntroScene,
+  GameScene,
+  HudScene,
+  PauseScene,
+  CaveCompleteScene,
+  GameOverScene,
+];

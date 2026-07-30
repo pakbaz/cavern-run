@@ -55,3 +55,4 @@ document.addEventListener('visibilitychange', () => {
 });
 
 export default game;
+

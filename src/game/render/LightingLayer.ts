@@ -47,8 +47,10 @@ export class LightingLayer {
   /** Match the lamp to the cave: deeper palettes are darker and cooler. */
   setPalette(palette: CavePalette, caveIndex: number, caveCount: number): void {
     const depth = caveCount <= 1 ? 0 : caveIndex / (caveCount - 1);
-    this.strength = 0.34 + depth * 0.42;
-    this.tint = mixColor(palette.background, 0x000000, 0.45);
+    // Strong enough that the lamp is genuinely the thing you see by, without
+    // ever hiding a boulder about to land on you.
+    this.strength = 0.58 + depth * 0.28;
+    this.tint = mixColor(palette.background, 0x000000, 0.55);
   }
 
   setEnabled(enabled: boolean): void {
@@ -66,7 +68,7 @@ export class LightingLayer {
 
     // The lamp flickers very slightly so it reads as a real light source.
     const flicker = 1 + Math.sin(ticks * 0.9) * 0.03 + Math.sin(ticks * 2.7) * 0.015;
-    this.punch(playerScreenX - camera.scrollX, playerScreenY - camera.scrollY, 7.2 * flicker);
+    this.punch(playerScreenX - camera.scrollX, playerScreenY - camera.scrollY, 9.5 * flicker);
 
     const range = visibleTiles(camera.scrollX, camera.scrollY, cave.width, cave.height);
     for (let y = range.minY; y <= range.maxY; y += 1) {
