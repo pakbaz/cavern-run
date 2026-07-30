@@ -29,10 +29,10 @@ Then open the address Vite prints (http://localhost:5173 by default).
 | Action | Keyboard | Gamepad | Touch |
 | --- | --- | --- | --- |
 | Move / dig | Arrow keys or WASD | D-pad or left stick | Swipe or hold |
-| Grab without moving | Shift or Ctrl | A / B / shoulder | Hold one finger, swipe another |
-| Confirm | Enter or Space | A | Tap |
+| Grab without moving | Shift or Ctrl | A / X, shoulders or triggers | Hold one finger, swipe another |
+| Confirm | Enter or Space | &mdash; | Tap |
 | Pause | Esc or P | Start | &mdash; |
-| Restart cave | R | &mdash; | &mdash; |
+| Restart cave | R | Select / Back | &mdash; |
 
 **Grab** scoops the dirt next to you without stepping into the gap. It is the
 difference between clearing the ground under a boulder and being under it.
@@ -66,19 +66,21 @@ sees more of both. Rotating mid-cave keeps the run going.
 
 | | Cave | Gems | Time | | Cave | Gems | Time |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| A | First Descent | 12 | 150 | K | Expanding Ruin | 18 | 140 |
-| B | Rockfall | 12 | 145 | L | Growth Chamber | 20 | 155 |
-| C | The Gallery | 15 | 150 | M | Slime Pits | 18 | 145 |
-| D | Pushing Through | 14 | 140 | N | Double Trouble | 22 | 150 |
-| E | Firefly Warren | 15 | 140 | O | Amoeba Bloom | 24 | 155 |
-| F | Crush Depth | 16 | 135 | P | The Crucible | 24 | 150 |
-| G | Butterfly Vault | 20 | 150 | Q | Nest of Wings | 28 | 150 |
+| A | First Descent | 13 | 150 | K | Expanding Ruin | 18 | 140 |
+| B | Rockfall | 13 | 145 | L | Growth Chamber | 20 | 155 |
+| C | The Gallery | 17 | 150 | M | Slime Pits | 18 | 145 |
+| D | Pushing Through | 15 | 140 | N | Double Trouble | 22 | 150 |
+| E | Firefly Warren | 17 | 140 | O | Amoeba Bloom | 24 | 155 |
+| F | Crush Depth | 18 | 135 | P | The Crucible | 24 | 150 |
+| G | Butterfly Vault | 16 | 155 | Q | Nest of Wings | 28 | 150 |
 | H | Magic Seam | 18 | 145 | R | Choke Point | 22 | 140 |
 | I | The Sieve | 20 | 140 | S | Cascade | 26 | 140 |
 | J | Green Tide | 20 | 160 | T | One Way Out | 30 | 165 |
 
 Each cave introduces one idea and then asks you to combine it with the last
-one. The layouts, tuning and names are original to this project.
+one. The caves also speed up as you descend: the simulation runs at 7 scans a
+second in the first pair and 9 by the last. The layouts, tuning and names are
+original to this project.
 
 ## How it is built
 
@@ -86,7 +88,7 @@ TypeScript, [Phaser 4](https://github.com/phaserjs/phaser), Vite and Vitest.
 
 ```bash
 npm run build       # typecheck, then bundle to dist/
-npm test            # 247 unit tests
+npm test            # the whole suite, headless
 npm run typecheck   # types only
 ```
 
@@ -110,7 +112,9 @@ Phaser is only the renderer, the input source and the scene shell.
 
 ```
 src/
+  main.ts            boot: Phaser config and the scene list
   config.ts          tuning constants, palettes, scene keys
+  layout.ts          picks the canvas size and tile counts from the window
   game/
     engine/          the simulation: grid, rules, run state (no Phaser)
     levels/          the 20 caves, as ASCII maps plus tuning
@@ -119,6 +123,7 @@ src/
     input/           keyboard, gamepad and touch, unified
     state/           IndexedDB persistence with localStorage fallback
     scenes/          Phaser scenes: title, cave intro, play, HUD, results
+  test/              headless harness and a bot that plays all 20 caves
 ```
 
 ### The soundtrack
