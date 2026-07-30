@@ -3,15 +3,16 @@ import { STORAGE_DB_NAME, STORAGE_DB_VERSION, STORAGE_FALLBACK_PREFIX } from '..
 /**
  * Local persistence, with a ladder of fallbacks.
  *
- * IndexedDB is the real home for high scores and per-cave bests. It is also
- * unavailable in a surprising number of situations -- private browsing, some
- * embedded webviews, storage-blocking extensions -- and a game that throws
- * instead of starting because it could not save a score would be a bad game.
- * So the store degrades: IndexedDB, then localStorage, then plain memory.
+ * IndexedDB is the real home for campaign progress, per-cave bests and
+ * settings. It is unavailable in a surprising number of situations -- private
+ * browsing, some embedded webviews, storage-blocking extensions -- so the
+ * store degrades: IndexedDB, then localStorage, then plain memory.
+ *
+ * Shared high scores deliberately do not live here. They are stored by the
+ * score API in D1, where changing browser storage cannot rewrite the table.
  */
 
 export const StoreName = {
-  highscores: 'highscores',
   caveBests: 'caveBests',
   progress: 'progress',
   settings: 'settings',
@@ -20,6 +21,7 @@ export const StoreName = {
 export type StoreNameValue = (typeof StoreName)[keyof typeof StoreName];
 
 export const ALL_STORES: readonly StoreNameValue[] = Object.values(StoreName);
+const LEGACY_HIGH_SCORES_STORE = 'highscores';
 
 export interface KeyValueStore {
   readonly kind: 'indexeddb' | 'localstorage' | 'memory';
@@ -87,6 +89,9 @@ function openIndexedDb(): Promise<IDBDatabase> {
       const db = request.result;
       for (const store of ALL_STORES) {
         if (!db.objectStoreNames.contains(store)) db.createObjectStore(store);
+      }
+      if (db.objectStoreNames.contains(LEGACY_HIGH_SCORES_STORE)) {
+        db.deleteObjectStore(LEGACY_HIGH_SCORES_STORE);
       }
     };
     request.onsuccess = () => resolve(request.result);
@@ -167,6 +172,21 @@ function localStorageWorks(): boolean {
   }
 }
 
+function clearLegacyHighScores(): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    const prefix = `${STORAGE_FALLBACK_PREFIX}${LEGACY_HIGH_SCORES_STORE}:`;
+    const doomed: string[] = [];
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const key = localStorage.key(i);
+      if (key?.startsWith(prefix)) doomed.push(key);
+    }
+    for (const key of doomed) localStorage.removeItem(key);
+  } catch {
+    // Storage can be blocked even when the global exists.
+  }
+}
+
 /* ------------------------------------------------------------------ *
  * Memory
  * ------------------------------------------------------------------ */
@@ -222,6 +242,8 @@ export function openStore(): Promise<KeyValueStore> {
 }
 
 async function selectStore(): Promise<KeyValueStore> {
+  clearLegacyHighScores();
+
   try {
     const db = await openIndexedDb();
     return new IndexedDbStore(db);

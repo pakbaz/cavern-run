@@ -204,5 +204,5 @@ export const DEFAULT_PALETTE_ID = 'glacier';
 
 /** Namespaced keys used by the persistence layer. */
 export const STORAGE_DB_NAME = 'cavern-run';
-export const STORAGE_DB_VERSION = 1;
+export const STORAGE_DB_VERSION = 2;
 export const STORAGE_FALLBACK_PREFIX = 'cavern-run:';

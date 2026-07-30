@@ -24,6 +24,50 @@ npm run dev
 
 Then open the address Vite prints (http://localhost:5173 by default).
 
+Campaign progress is checkpointed after every cleared cave in browser IndexedDB
+(with a localStorage fallback). Returning players get a **Continue Cave** option
+that restores the next cave, banked score and remaining lives.
+
+To run the shared high-score API locally, initialize the local D1 database and
+start the Worker in a second terminal:
+
+```bash
+npm run db:migrate:local
+npm run dev:scores
+```
+
+Vite proxies `/api/scores` to the local Worker.
+
+## High-score backend
+
+GitHub Pages cannot write a SQLite file because it only serves static files.
+The shared leaderboard therefore uses a small Cloudflare Worker with D1,
+Cloudflare's managed SQLite-compatible database. Browser storage never contains
+the shared score table.
+
+One-time setup:
+
+```bash
+npx wrangler login
+npx wrangler d1 create cavern-run-scores
+npm run db:migrate:remote
+npm run deploy:scores
+```
+
+When `wrangler d1 create` asks to add the binding, accept it so the generated
+database ID is written to `wrangler.jsonc`. After deployment, set the GitHub
+Actions repository variable `SCORE_API_URL` to the Worker endpoint, including
+the path:
+
+```text
+https://cavern-run-scores.<your-subdomain>.workers.dev/api/scores
+```
+
+The next successful `main` build embeds that URL in the GitHub Pages bundle.
+The Worker only permits browser requests from `https://pakbaz.github.io`,
+validates all submitted fields, derives the cave letter and timestamp itself,
+and retains only the ten highest scores in D1.
+
 ## Controls
 
 | Action | Keyboard | Gamepad | Touch |
@@ -87,7 +131,7 @@ original to this project.
 TypeScript, [Phaser 4](https://github.com/phaserjs/phaser), Vite and Vitest.
 
 ```bash
-npm run build       # typecheck, then bundle to dist/
+npm run build       # typecheck the game and Worker, then bundle to dist/
 npm test            # the whole suite, headless
 npm run typecheck   # types only
 ```

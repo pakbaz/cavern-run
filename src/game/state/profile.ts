@@ -1,13 +1,5 @@
+import { MAX_LIVES, STARTING_LIVES } from '../../config';
 import { openStore, StoreName } from './db';
-
-/** One row in the high-score table. */
-export interface ScoreEntry {
-  readonly name: string;
-  readonly score: number;
-  readonly caveReached: number;
-  readonly caveLetter: string;
-  readonly date: string;
-}
 
 /** Best result recorded for a single cave. */
 export interface CaveBest {
@@ -19,42 +11,11 @@ export interface CaveBest {
 }
 
 export interface Progress {
+  /** Index of the next unfinished cave. May equal the cave count after a win. */
   readonly furthestCave: number;
   readonly lastScore: number;
+  readonly lives: number;
   readonly updated: string;
-}
-
-export const HIGH_SCORE_LIMIT = 10;
-
-/* ------------------------------------------------------------------ *
- * Pure helpers -- the actual rules, kept out of the async plumbing so
- * they can be tested without a database.
- * ------------------------------------------------------------------ */
-
-/** Sort descending by score, then by cave reached, and keep the top `limit`. */
-export function rankScores(entries: readonly ScoreEntry[], limit = HIGH_SCORE_LIMIT): ScoreEntry[] {
-  return [...entries]
-    .sort((a, b) => b.score - a.score || b.caveReached - a.caveReached || a.date.localeCompare(b.date))
-    .slice(0, limit);
-}
-
-/** Would this score make the table? An empty table always accepts. */
-export function qualifies(entries: readonly ScoreEntry[], score: number, limit = HIGH_SCORE_LIMIT): boolean {
-  if (score <= 0) return false;
-  if (entries.length < limit) return true;
-  const ranked = rankScores(entries, limit);
-  const lowest = ranked[ranked.length - 1];
-  return lowest === undefined || score > lowest.score;
-}
-
-/** Arcade-style initials: three uppercase A-Z characters. */
-export function normalizeInitials(raw: string): string {
-  const cleaned = raw
-    .toUpperCase()
-    .replace(/[^A-Z0-9 ]/g, '')
-    .trim()
-    .slice(0, 3);
-  return cleaned.length > 0 ? cleaned : 'YOU';
 }
 
 /** Keep whichever of the two runs went better. */
@@ -67,40 +28,6 @@ export function mergeCaveBest(existing: CaveBest | undefined, candidate: CaveBes
     diamonds: Math.max(existing.diamonds, candidate.diamonds),
     completed: existing.completed || candidate.completed,
   };
-}
-
-/* ------------------------------------------------------------------ *
- * Storage-backed API
- * ------------------------------------------------------------------ */
-
-/**
- * Nothing here rejects. Losing a high score is annoying; failing to show the
- * title screen because the score table would not load is much worse, so every
- * read falls back to an empty result and every write is best-effort.
- */
-
-export async function loadHighScores(): Promise<ScoreEntry[]> {
-  try {
-    const store = await openStore();
-    const rows = await store.all<ScoreEntry>(StoreName.highscores);
-    return rankScores(rows.filter(isScoreEntry));
-  } catch {
-    return [];
-  }
-}
-
-export async function submitScore(entry: ScoreEntry): Promise<ScoreEntry[]> {
-  try {
-    const store = await openStore();
-    const existing = (await store.all<ScoreEntry>(StoreName.highscores)).filter(isScoreEntry);
-    const ranked = rankScores([...existing, entry]);
-
-    await store.clear(StoreName.highscores);
-    await Promise.all(ranked.map((row, index) => store.put(StoreName.highscores, `${index}`, row)));
-    return ranked;
-  } catch {
-    return rankScores([entry]);
-  }
 }
 
 export async function loadCaveBests(): Promise<Map<number, CaveBest>> {
@@ -127,32 +54,70 @@ export async function recordCaveBest(candidate: CaveBest): Promise<void> {
   }
 }
 
+export function freshProgress(): Progress {
+  return {
+    furthestCave: 0,
+    lastScore: 0,
+    lives: STARTING_LIVES,
+    updated: new Date().toISOString(),
+  };
+}
+
+export function normalizeProgress(value: unknown): Progress {
+  if (!value || typeof value !== 'object') return freshProgress();
+  const row = value as Partial<Progress>;
+  return {
+    furthestCave: nonNegativeInteger(row.furthestCave),
+    lastScore: nonNegativeInteger(row.lastScore),
+    lives: positiveInteger(row.lives, STARTING_LIVES),
+    updated: typeof row.updated === 'string' ? row.updated : new Date().toISOString(),
+  };
+}
+
+/** Keep score and lives attached to the deepest checkpoint that earned them. */
+export function mergeProgress(current: Progress, candidate: Progress): Progress {
+  if (candidate.furthestCave > current.furthestCave) return candidate;
+  if (candidate.furthestCave < current.furthestCave) return current;
+  if (candidate.lastScore > current.lastScore) return candidate;
+  if (candidate.lastScore < current.lastScore) return current;
+  return candidate.lives > current.lives ? candidate : current;
+}
+
 export async function loadProgress(): Promise<Progress> {
   try {
     const store = await openStore();
-    const saved = await store.get<Progress>(StoreName.progress, 'current');
-    if (saved && typeof saved.furthestCave === 'number') return saved;
+    return normalizeProgress(await store.get<unknown>(StoreName.progress, 'current'));
   } catch {
     // Fall through to a fresh run.
   }
-  return { furthestCave: 0, lastScore: 0, updated: new Date().toISOString() };
+  return freshProgress();
 }
 
-export async function saveProgress(furthestCave: number, lastScore: number): Promise<void> {
+export async function saveProgress(furthestCave: number, lastScore: number, lives: number): Promise<Progress> {
+  const candidate = normalizeProgress({
+    furthestCave,
+    lastScore,
+    lives,
+    updated: new Date().toISOString(),
+  });
+
   try {
     const store = await openStore();
     const current = await loadProgress();
-    await store.put(StoreName.progress, 'current', {
-      furthestCave: Math.max(current.furthestCave, furthestCave),
-      lastScore,
-      updated: new Date().toISOString(),
-    });
+    const merged = mergeProgress(current, candidate);
+    await store.put(StoreName.progress, 'current', merged);
+    return merged;
   } catch {
-    // Best-effort.
+    return candidate;
   }
 }
 
-function isScoreEntry(value: unknown): value is ScoreEntry {
-  const row = value as ScoreEntry | null;
-  return typeof row?.name === 'string' && typeof row.score === 'number';
+function nonNegativeInteger(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+}
+
+function positiveInteger(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+    ? Math.min(MAX_LIVES, Math.floor(value))
+    : fallback;
 }

@@ -1,18 +1,16 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 
-import { MemoryStore, useStore } from './db';
+import { MemoryStore, StoreName, useStore } from './db';
 import {
-  HIGH_SCORE_LIMIT,
-  loadHighScores,
+  loadProgress,
   mergeCaveBest,
-  normalizeInitials,
-  qualifies,
-  rankScores,
+  mergeProgress,
+  normalizeProgress,
   recordCaveBest,
   loadCaveBests,
-  submitScore,
-  type ScoreEntry,
+  saveProgress,
 } from './profile';
+import { HIGH_SCORE_LIMIT, normalizeInitials, qualifies, rankScores, type ScoreEntry } from './scores';
 import { DEFAULT_SETTINGS, normalizeSettings, loadSettings, saveSettings } from './settings';
 
 function entry(name: string, score: number, caveReached = 1, date = '2024-01-01'): ScoreEntry {
@@ -117,18 +115,6 @@ describe('mergeCaveBest', () => {
 });
 
 describe('storage round-trips', () => {
-  it('persists and ranks submitted scores', async () => {
-    await submitScore(entry('AAA', 100));
-    await submitScore(entry('BBB', 900));
-    const table = await loadHighScores();
-    expect(table.map((r) => r.name)).toEqual(['BBB', 'AAA']);
-  });
-
-  it('keeps only the top ten across many submissions', async () => {
-    for (let i = 0; i < 15; i += 1) await submitScore(entry(`P${i}`, i * 100));
-    expect(await loadHighScores()).toHaveLength(HIGH_SCORE_LIMIT);
-  });
-
   it('merges repeated cave bests', async () => {
     await recordCaveBest({ caveIndex: 2, bestScore: 100, bestSecondsLeft: 10, diamonds: 4, completed: false });
     await recordCaveBest({ caveIndex: 2, bestScore: 80, bestSecondsLeft: 55, diamonds: 9, completed: true });
@@ -137,11 +123,52 @@ describe('storage round-trips', () => {
     expect(best).toMatchObject({ bestScore: 100, bestSecondsLeft: 55, diamonds: 9, completed: true });
   });
 
+  it('persists a campaign checkpoint', async () => {
+    await saveProgress(12, 4200, 5);
+
+    expect(await loadProgress()).toMatchObject({ furthestCave: 12, lastScore: 4200, lives: 5 });
+  });
+
+  it('does not replace a deep checkpoint with a shallower new run', async () => {
+    await saveProgress(12, 4200, 5);
+    await saveProgress(1, 100, 3);
+
+    expect(await loadProgress()).toMatchObject({ furthestCave: 12, lastScore: 4200, lives: 5 });
+  });
+
+  it('loads old checkpoints with default lives', async () => {
+    const store = new MemoryStore();
+    useStore(store);
+    await store.put(StoreName.progress, 'current', {
+      furthestCave: 12,
+      lastScore: 4200,
+      updated: '2026-01-01T00:00:00.000Z',
+    });
+
+    expect(await loadProgress()).toMatchObject({ furthestCave: 12, lastScore: 4200, lives: 3 });
+  });
+
   it('round-trips settings', async () => {
     await saveSettings({ ...DEFAULT_SETTINGS, musicVolume: 0.25, lighting: false });
     const loaded = await loadSettings();
     expect(loaded.musicVolume).toBe(0.25);
     expect(loaded.lighting).toBe(false);
+  });
+
+  describe('campaign checkpoint rules', () => {
+    it('keeps score and lives from the deepest checkpoint', () => {
+      const current = normalizeProgress({ furthestCave: 12, lastScore: 4200, lives: 5 });
+      const shallower = normalizeProgress({ furthestCave: 2, lastScore: 9000, lives: 9 });
+
+      expect(mergeProgress(current, shallower)).toBe(current);
+    });
+
+    it('accepts a better replay of the same checkpoint', () => {
+      const current = normalizeProgress({ furthestCave: 12, lastScore: 4200, lives: 4 });
+      const better = normalizeProgress({ furthestCave: 12, lastScore: 4600, lives: 5 });
+
+      expect(mergeProgress(current, better)).toBe(better);
+    });
   });
 });
 

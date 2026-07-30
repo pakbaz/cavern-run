@@ -1,6 +1,7 @@
 import { CaveSession } from '../engine/CaveSession';
 import type { CaveResult } from '../engine/CaveSession';
 import { CAVES } from '../levels/index';
+import { freshProgress, type Progress } from '../state/profile';
 import { DEFAULT_SETTINGS, type Settings } from '../state/settings';
 
 /**
@@ -14,6 +15,7 @@ import { DEFAULT_SETTINGS, type Settings } from '../state/settings';
 export class RunState {
   session: CaveSession;
   settings: Settings = { ...DEFAULT_SETTINGS };
+  progress: Progress = freshProgress();
 
   /** Result of the cave just finished, for the tally screen to read. */
   lastResult: CaveResult | null = null;
@@ -27,6 +29,14 @@ export class RunState {
 
   newRun(): CaveSession {
     this.session = new CaveSession(CAVES);
+    this.lastResult = null;
+    this.won = false;
+    return this.session;
+  }
+
+  resumeRun(): CaveSession {
+    const startIndex = Math.min(this.progress.furthestCave, CAVES.length - 1);
+    this.session = new CaveSession(CAVES, startIndex, this.progress.lives, this.progress.lastScore);
     this.lastResult = null;
     this.won = false;
     return this.session;

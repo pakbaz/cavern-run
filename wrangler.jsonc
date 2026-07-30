@@ -1,0 +1,19 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "cavern-run-scores",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-07-21",
+  "d1_databases": [
+    {
+      "binding": "SCORES_DB",
+      "database_name": "cavern-run-scores",
+      "migrations_dir": "worker/migrations"
+    }
+  ],
+  "vars": {
+    "ALLOWED_ORIGIN": "https://pakbaz.github.io"
+  },
+  "observability": {
+    "enabled": true
+  }
+}

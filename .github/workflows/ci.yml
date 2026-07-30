@@ -42,6 +42,8 @@ jobs:
       # `npm run build` type-checks before it bundles, so this covers both.
       - name: Build
         run: npm run build
+        env:
+          VITE_SCORE_API_URL: ${{ vars.SCORE_API_URL }}
 
       - name: Upload the site
         if: github.ref == 'refs/heads/main'

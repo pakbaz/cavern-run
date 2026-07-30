@@ -46,19 +46,21 @@ export class CaveSession {
   readonly caves: readonly CaveSpec[];
 
   caveIndex: number;
-  score = 0;
+  score: number;
   lives: number;
 
   private sim: CaveSim;
   private accumulator = 0;
-  private nextExtraLifeAt = EXTRA_LIFE_EVERY;
+  private nextExtraLifeAt: number;
   private readonly collectedEvents: SimEvent[] = [];
 
-  constructor(caves: readonly CaveSpec[], startIndex = 0, lives = STARTING_LIVES) {
+  constructor(caves: readonly CaveSpec[], startIndex = 0, lives = STARTING_LIVES, initialScore = 0) {
     if (caves.length === 0) throw new Error('A session needs at least one cave');
     this.caves = caves;
     this.caveIndex = clamp(startIndex, 0, caves.length - 1);
     this.lives = lives;
+    this.score = Math.max(0, Math.floor(initialScore));
+    this.nextExtraLifeAt = (Math.floor(this.score / EXTRA_LIFE_EVERY) + 1) * EXTRA_LIFE_EVERY;
     this.sim = this.createSim();
   }
 
