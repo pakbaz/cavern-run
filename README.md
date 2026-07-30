@@ -123,13 +123,22 @@ src/
 
 ### The soundtrack
 
-The music is written by the game as you play. Caves are grouped into four
-tiers, each with a darker mode than the last &mdash; Dorian, Aeolian, Phrygian,
-then Locrian for the final five &mdash; and the tempo climbs from 100 to 170
-BPM as the campaign goes on. Within a cave the arrangement responds to how much
-trouble you are in: the pad thins out and the drums and lead come forward as
-the clock drains and hazards close in, and a ticking layer joins over the last
-ten seconds.
+The music is written by the game as you play, and every cave gets its own
+piece. A cave's theme fixes its mode, chord progression, melodic motif, groove,
+swing and timbres, and the twenty themes darken as you descend &mdash; open
+Dorian tunes at the top, airless Locrian ones that never resolve at the bottom
+&mdash; while the tier a cave sits in drops the tonic lower.
+
+Inside a cave the piece is then *developed*, in four movements driven by the
+clock. It opens as pad and bass with the motif stated sparsely, then a
+sixteenth-note counter-line arrives and the melody fills in; past halfway the
+drums start rolling fills, a seventh sours the pad, the last bar of the loop is
+swapped for a chord that refuses to resolve, and a swell winds up into every
+repeat. For the endgame a dissonant pedal comes in underneath, the bass stops
+arpeggiating and hammers the root, and the whole tune is winched up a semitone.
+Layered on top of that, the arrangement reacts to how much trouble you are in:
+tempo, brightness and the drums all follow the nearest hazard and the diamonds
+you still owe, and a ticking layer counts out the final ten seconds.
 
 ### Saved data
 
