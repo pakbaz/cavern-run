@@ -1,0 +1,41 @@
+import { DEFAULT_TUNING } from '../../engine/simTypes';
+import type { CaveSpec } from '../caveFormat';
+
+/** N — Double Trouble. One kind turns left, the other turns right. Both turn on you. */
+export const caveN: CaveSpec = {
+  ...DEFAULT_TUNING,
+  id: 'caveN',
+  letter: 'N',
+  name: 'Double Trouble',
+  paletteId: 'sulphur',
+  hint: 'One kind turns left, the other turns right. Both turn on you.',
+  diamondsRequired: 22,
+  diamondValue: 14,
+  extraDiamondValue: 35,
+  timeLimit: 150,
+  tickHz: 8,
+  map: [
+    'WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW',
+    'W..................d..............r.d..W',
+    'W..WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW.d.W',
+    'W..W         WW         WW         W...W',
+    'W..W f       WW f       WW f       W...W',
+    'Wd.W         WW         WW         W..rW',
+    'W..W    d    WW    d    WW    d    W...W',
+    'W..W       F WW       F WW       F W...W',
+    'W..W         WW         WW         W...W',
+    'W..WWWWW.WWWWWWWWWW.WWWWWWWWWW.WWWWW...W',
+    'W...d...rd........r..r.d....r........d.W',
+    'W.....d. ..r...... ...r.d... ..........W',
+    'W....www wwww..www wwww..www wwww.r....W',
+    'W....w      w..w      w.rw      w......W',
+    'W....w      w..w      w..w      w......W',
+    'W....w  b   w..w  b   w..w  b   w......W',
+    'W....w      w..w      w..w      w......W',
+    'W....w      w..w      w..w      w......W',
+    'W....wwwwwwww..wwwwwwww..wwwwwwww......W',
+    'W............d...d................rd...W',
+    'W.P............d.....................E.W',
+    'WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW',
+  ],
+};

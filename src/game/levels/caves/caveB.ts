@@ -1,0 +1,41 @@
+import { DEFAULT_TUNING } from '../../engine/simTypes';
+import type { CaveSpec } from '../caveFormat';
+
+/** B — Rockfall. Boulders roll off round edges. Never stand below one. */
+export const caveB: CaveSpec = {
+  ...DEFAULT_TUNING,
+  id: 'caveB',
+  letter: 'B',
+  name: 'Rockfall',
+  paletteId: 'glacier',
+  hint: 'Boulders roll off round edges. Never stand below one.',
+  diamondsRequired: 12,
+  diamondValue: 10,
+  extraDiamondValue: 25,
+  timeLimit: 145,
+  tickHz: 7,
+  map: [
+    'WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW',
+    'Wr..rrrr.r..r..r.r..r...r...r.r....r...W',
+    'Wr.rrrr.r.......r.r.....r..rr.rrr....E.W',
+    'W                                   ...W',
+    'W....W.....W.....W.....W.....W.....W...W',
+    'W.r..W.....W.....W.....W...d.Wr....W...W',
+    'W....W.....W.....W....dW..r..W.d.r.W...W',
+    'W.r..W.....W.....W..r..W.....W.....W...W',
+    'W....W.....W.....W.....W.....W.....W...W',
+    'W....W.....W..d..W.....Wr....W.....W...W',
+    'W...rW.....W.....W.....W.....W...d.W...W',
+    'W....W.dd..W.....W.....W.....W....dWd..W',
+    'W.d..Wd....W.....W..r..Wr....W..r..W...W',
+    'Wd...W.d...Wd....W.....W.....W...d.W...W',
+    'W....W.....W.....W.....W.....W.....W...W',
+    'W....W.....W.....W.....W....rW.....W...W',
+    'W....W.r...W....rW.....W.....W.....W...W',
+    'W....W.....W.....W.r...W.....W..r..Wd..W',
+    'W.....................d...d............W',
+    'W.P........d......d........d...........W',
+    'W......................................W',
+    'WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW',
+  ],
+};

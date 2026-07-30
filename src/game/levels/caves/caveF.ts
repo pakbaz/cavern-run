@@ -1,0 +1,41 @@
+import { DEFAULT_TUNING } from '../../engine/simTypes';
+import type { CaveSpec } from '../caveFormat';
+
+/** F — Crush Depth. A falling boulder settles an argument with a firefly. */
+export const caveF: CaveSpec = {
+  ...DEFAULT_TUNING,
+  id: 'caveF',
+  letter: 'F',
+  name: 'Crush Depth',
+  paletteId: 'ember',
+  hint: 'A falling boulder settles an argument with a firefly.',
+  diamondsRequired: 16,
+  diamondValue: 12,
+  extraDiamondValue: 30,
+  timeLimit: 135,
+  tickHz: 8,
+  map: [
+    'WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW',
+    'W......d..........d.d......drdr........W',
+    'W.P....................d.d..........r..W',
+    'W...W.rr...W.rr...W.rr...W.rr...W.rr...W',
+    'Wd..W     .W     .W     .W     .W     .W',
+    'Wd..W     .W     .W     .W     .W     .W',
+    'W...W......W......W......W......W......W',
+    'W...W     .W     .W     .W     .W     dW',
+    'W...W  f  .W  f  .W  f  .W  f  .W  f  .W',
+    'W...W     .W     .W     .W     .W     rW',
+    'W...Wd  d .Wd  d .Wd  d .Wd  d .Wd  d .W',
+    'W...W......W.r....W.r.r.dW......W......W',
+    'W...W.....dW......W......W......W......W',
+    'W...W......W......W.....rW......W......W',
+    'W...W......W....r.W......W......W......W',
+    'W...W......W..d...W......W.r....W......W',
+    'W...W......W......W......W.....rW......W',
+    'W...............d..........r........d..W',
+    'W......................................W',
+    'W................r.r.................E.W',
+    'W.............................d........W',
+    'WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW',
+  ],
+};

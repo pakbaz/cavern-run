@@ -1,0 +1,41 @@
+import { DEFAULT_TUNING } from '../../engine/simTypes';
+import type { CaveSpec } from '../caveFormat';
+
+/** K — Expanding Ruin. These walls are still being built. Do not be inside them. */
+export const caveK: CaveSpec = {
+  ...DEFAULT_TUNING,
+  id: 'caveK',
+  letter: 'K',
+  name: 'Expanding Ruin',
+  paletteId: 'amethyst',
+  hint: 'These walls are still being built. Do not be inside them.',
+  diamondsRequired: 18,
+  diamondValue: 14,
+  extraDiamondValue: 35,
+  timeLimit: 140,
+  tickHz: 8,
+  map: [
+    'WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW',
+    'W...d...d..................r.......r...W',
+    'W.P...........................d........W',
+    'W.................................rd...W',
+    'W. H                                  .W',
+    'W.                                    .W',
+    'W....d........d.....r..d......d........W',
+    'W....d........................d.r......W',
+    'W.                                  H .W',
+    'W.                                    .W',
+    'W.d...........r.....d............d.....W',
+    'W...d....r....d............d........r..W',
+    'Wd H                                  .W',
+    'W.                                    .W',
+    'W................d......d...........d..W',
+    'W.............d.........d.......d......W',
+    'W.                                  H .W',
+    'W.                                    .W',
+    'W.................r..................r.W',
+    'W.........d..................r.........W',
+    'Wd............r................d...r.E.W',
+    'WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW',
+  ],
+};

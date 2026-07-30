@@ -1,0 +1,42 @@
+import { DEFAULT_TUNING } from '../../engine/simTypes';
+import type { CaveSpec } from '../caveFormat';
+
+/** I — The Sieve. Two seams, one charge. Spend it well. */
+export const caveI: CaveSpec = {
+  ...DEFAULT_TUNING,
+  id: 'caveI',
+  letter: 'I',
+  name: 'The Sieve',
+  paletteId: 'verdant',
+  hint: 'Two seams, one charge. Spend it well.',
+  diamondsRequired: 20,
+  diamondValue: 12,
+  extraDiamondValue: 30,
+  timeLimit: 140,
+  tickHz: 8,
+  magicWallTicks: 150,
+  map: [
+    'WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW',
+    'W.d.d..............W.W.................W',
+    'W..................W.W.........d.......W',
+    'Wd.               .W.W               ..W',
+    'W..               .W.W               ..W',
+    'W.. r r r r r r r .W.W r r r r r r r ..W',
+    'W..               .W.W               ..W',
+    'W.. r  r  r  r  r .W.W  r  r  r  r   ..W',
+    'W..               .W.W               ..W',
+    'W..               .W.W               ..W',
+    'W.. MMMMMMMMMMMMM .W.W MMMMMMMMMMMMM ..W',
+    'W..               .W.W               ..W',
+    'W..               .W.W               ..W',
+    'W..               .W.W               ..W',
+    'W..               .W.W               ..W',
+    'W..               .W.W               ..W',
+    'W..               .W.W               ..W',
+    'W..               .W.W               ..W',
+    'W..WWWWWWWWWWWWWW..W.W.WWWWWWWWWWWWWW..W',
+    'W.................dW.W............d....W',
+    'W.P............................d.....E.W',
+    'WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW',
+  ],
+};

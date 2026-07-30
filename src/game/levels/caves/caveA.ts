@@ -1,0 +1,41 @@
+import { DEFAULT_TUNING } from '../../engine/simTypes';
+import type { CaveSpec } from '../caveFormat';
+
+/** A — First Descent. Dig for diamonds. Mind what falls. */
+export const caveA: CaveSpec = {
+  ...DEFAULT_TUNING,
+  id: 'caveA',
+  letter: 'A',
+  name: 'First Descent',
+  paletteId: 'glacier',
+  hint: 'Dig for diamonds. Mind what falls.',
+  diamondsRequired: 12,
+  diamondValue: 10,
+  extraDiamondValue: 25,
+  timeLimit: 150,
+  tickHz: 7,
+  map: [
+    'WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW',
+    'W...............d.............r........W',
+    'W.P...d................d.........r.....W',
+    'W............d...d...........r..d......W',
+    'W......................................W',
+    'W...d....r...........d......r..........W',
+    'W.d....................................W',
+    'W...WWWWWWWWWWWWWWWWWr...r.....dr...r..W',
+    'W.......r........dr...........d....r...W',
+    'W................r.........r...........W',
+    'W..dd..................r.............rrW',
+    'W......................................W',
+    'W.....d................................W',
+    'W...r....r.........WWWWWWWWWWWWWWWWW...W',
+    'W..............................r.......W',
+    'W......................................W',
+    'W...d......................d....d....r.W',
+    'W......................................W',
+    'W...................d..................W',
+    'W....................................E.W',
+    'Wr............r....d...................W',
+    'WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW',
+  ],
+};

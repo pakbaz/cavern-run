@@ -1,0 +1,41 @@
+import { DEFAULT_TUNING } from '../../engine/simTypes';
+import type { CaveSpec } from '../caveFormat';
+
+/** Q — Nest of Wings. A nest detonates as one. Stand well back. */
+export const caveQ: CaveSpec = {
+  ...DEFAULT_TUNING,
+  id: 'caveQ',
+  letter: 'Q',
+  name: 'Nest of Wings',
+  paletteId: 'obsidian',
+  hint: 'A nest detonates as one. Stand well back.',
+  diamondsRequired: 28,
+  diamondValue: 16,
+  extraDiamondValue: 40,
+  timeLimit: 150,
+  tickHz: 8.5,
+  map: [
+    'WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW',
+    'W......................................W',
+    'W........rr........W........r..d.....E.W',
+    'W.....r... ........W........ ..........W',
+    'W......www wwww..ddW.....www wwww......W',
+    'W......w      w....W.....w      w......W',
+    'W......w  b   w....W.....w  b   w......W',
+    'W......w   B  w....W.....w   B  w......W',
+    'W......w      w....W.....w      w......W',
+    'W.....dwwwwwwww....W.....wwwwwwww......W',
+    'W........d.r.......W.............r.r...W',
+    'W.........r.rd.....W........r..........W',
+    'W......... ........Wr....... ..........W',
+    'W......www wwww....W.....www wwww......W',
+    'W......w      w....W.....w      w......W',
+    'W......w  b   wd...W..d..w  b   w......W',
+    'W......w   B  w....W.r...w   B  w......W',
+    'W......w      w....W..r..w      wd.....W',
+    'W....r.wwwwwwww....W.....wwwwwwww......W',
+    'W..................W...................W',
+    'W.P....................................W',
+    'WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW',
+  ],
+};

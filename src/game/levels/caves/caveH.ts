@@ -1,0 +1,42 @@
+import { DEFAULT_TUNING } from '../../engine/simTypes';
+import type { CaveSpec } from '../caveFormat';
+
+/** H — Magic Seam. The seam turns stone to diamond -- but only while it burns. */
+export const caveH: CaveSpec = {
+  ...DEFAULT_TUNING,
+  id: 'caveH',
+  letter: 'H',
+  name: 'Magic Seam',
+  paletteId: 'verdant',
+  hint: 'The seam turns stone to diamond -- but only while it burns.',
+  diamondsRequired: 18,
+  diamondValue: 12,
+  extraDiamondValue: 30,
+  timeLimit: 145,
+  tickHz: 7.5,
+  magicWallTicks: 190,
+  map: [
+    'WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW',
+    'W.......................d...d.........dW',
+    'W......................................W',
+    'W.....                            .....W',
+    'W.....                            .....W',
+    'W.....                            .....W',
+    'W..... r r r r r r r r r r r r r  .....W',
+    'W.....                            .....W',
+    'W..d.. r r r r r r r r r r r r r  .....W',
+    'W.....                            .....W',
+    'W....W                            W....W',
+    'W....WMMMMMMMMMMMMMMMMMMMMMMMMMMMMW....W',
+    'W....W                            W...dW',
+    'W....W                            W....W',
+    'W....W                            W....W',
+    'W....W                            W....W',
+    'W....W                            .....W',
+    'W....WWWWWWWWWWWWWWWWWWWWWWWWWWWWWW....W',
+    'W.............................d........W',
+    'W.P..................................E.W',
+    'W......................................W',
+    'WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW',
+  ],
+};

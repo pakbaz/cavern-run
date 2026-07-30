@@ -1,0 +1,42 @@
+import { DEFAULT_TUNING } from '../../engine/simTypes';
+import type { CaveSpec } from '../caveFormat';
+
+/** D — Pushing Through. Walk into a boulder with space behind it and it gives way. */
+export const caveD: CaveSpec = {
+  ...DEFAULT_TUNING,
+  id: 'caveD',
+  letter: 'D',
+  name: 'Pushing Through',
+  paletteId: 'ember',
+  hint: 'Walk into a boulder with space behind it and it gives way.',
+  diamondsRequired: 14,
+  diamondValue: 12,
+  extraDiamondValue: 30,
+  timeLimit: 140,
+  tickHz: 7.5,
+  pushChance: 0.35,
+  map: [
+    'WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW',
+    'W.........d....d....d....d.............W',
+    'W.P...  r    r    r    r    r   .......W',
+    'W....d.................................W',
+    'WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW..WWWW',
+    'W.........d....d....d....d.............W',
+    'W.....  r    r    r    r    r   .......W',
+    'W..............................d.......W',
+    'WWWW..WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW',
+    'W.........d....d....d....d.............W',
+    'W.....  r    r    r    r    r   .......W',
+    'W........d.d.......d.................d.W',
+    'WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW..WWWW',
+    'W.........d....d....d....d.............W',
+    'W.....  r    r    r    r    r   .......W',
+    'W.......d..........................d...W',
+    'WWWW..WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW',
+    'W.........d....d....d....d.............W',
+    'W.d...  r    r    r    r    r   .......W',
+    'W......................................W',
+    'W................................d...E.W',
+    'WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW',
+  ],
+};

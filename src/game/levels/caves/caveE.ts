@@ -1,0 +1,41 @@
+import { DEFAULT_TUNING } from '../../engine/simTypes';
+import type { CaveSpec } from '../caveFormat';
+
+/** E — Firefly Warren. Fireflies hug the wall on their left. Learn the loop. */
+export const caveE: CaveSpec = {
+  ...DEFAULT_TUNING,
+  id: 'caveE',
+  letter: 'E',
+  name: 'Firefly Warren',
+  paletteId: 'ember',
+  hint: 'Fireflies hug the wall on their left. Learn the loop.',
+  diamondsRequired: 15,
+  diamondValue: 12,
+  extraDiamondValue: 30,
+  timeLimit: 140,
+  tickHz: 7.5,
+  map: [
+    'WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW',
+    'W...............................d......W',
+    'W.d....................................W',
+    'W...        ....        r...        ...W',
+    'W... f      ..d. f      .... f      ...W',
+    'W...  WWWW  ....  WWWW  ....  WWWW  ...W',
+    'W..d  WWWW  ...r  WWWW  ....  WWWW  ...W',
+    'W...      d .r..      d ...d      d ...W',
+    'W...        ...d        ....        ...W',
+    'W.........d............................W',
+    'W...........r..d.....d...........r.....W',
+    'W...........d..........................W',
+    'W.........        ....        ....r....W',
+    'W......... f      .... f      ........rW',
+    'W.........  WWWW  .r..  WWWW  ....d....W',
+    'W..d.r....  WWWW  ...d  WWWW  ...r.....W',
+    'W.........      d ....      d r......d.W',
+    'W.........        ....        .dr......W',
+    'W.......d..............................W',
+    'W...r.........................r........W',
+    'W.P....d.....r..r..r.r...............E.W',
+    'WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW',
+  ],
+};

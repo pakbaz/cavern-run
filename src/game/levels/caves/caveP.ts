@@ -1,0 +1,42 @@
+import { DEFAULT_TUNING } from '../../engine/simTypes';
+import type { CaveSpec } from '../caveFormat';
+
+/** P — The Crucible. Feed the seam. Feed it butterflies if you have to. */
+export const caveP: CaveSpec = {
+  ...DEFAULT_TUNING,
+  id: 'caveP',
+  letter: 'P',
+  name: 'The Crucible',
+  paletteId: 'obsidian',
+  hint: 'Feed the seam. Feed it butterflies if you have to.',
+  diamondsRequired: 24,
+  diamondValue: 16,
+  extraDiamondValue: 40,
+  timeLimit: 150,
+  tickHz: 8.5,
+  magicWallTicks: 160,
+  map: [
+    'WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW',
+    'W......................................W',
+    'W......................................W',
+    'W...                                ...W',
+    'W... r  r  r  r  r  r  r  r  r  r   ...W',
+    'W...                                ...W',
+    'W...                                ...W',
+    'W...                                ...W',
+    'W...  r    r    r    r    r    r    ...W',
+    'W...                                ...W',
+    'W...     b          b          b    ...W',
+    'W......................................W',
+    'W..WMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMW..W',
+    'W..W                                W..W',
+    'W..W                                W..W',
+    'W..W                                W..W',
+    'W..W                                ...W',
+    'W..WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW..W',
+    'W......................................W',
+    'W......................................W',
+    'W.P..................................E.W',
+    'WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW',
+  ],
+};

@@ -1,0 +1,43 @@
+import { DEFAULT_TUNING } from '../../engine/simTypes';
+import type { CaveSpec } from '../caveFormat';
+
+/** S — Cascade. Everything up there is coming down. Choose where you are. */
+export const caveS: CaveSpec = {
+  ...DEFAULT_TUNING,
+  id: 'caveS',
+  letter: 'S',
+  name: 'Cascade',
+  paletteId: 'obsidian',
+  hint: 'Everything up there is coming down. Choose where you are.',
+  diamondsRequired: 26,
+  diamondValue: 18,
+  extraDiamondValue: 45,
+  timeLimit: 140,
+  tickHz: 9,
+  magicWallTicks: 140,
+  slimePermeability: 0.22,
+  map: [
+    'WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW',
+    'W......................................W',
+    'W.  r                   rr  r   r  r  .W',
+    'W.    rr    rrr       rr r       r  r .W',
+    'W.r   rr     r               r   r r  .W',
+    'W.  r   rr    r   r rr r r    r   r   .W',
+    'W.   r  rr r  r    r     r      r r r .W',
+    'W....d.............d...............d...W',
+    'W...SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS...W',
+    'Wd                                    .W',
+    'W.                                    .W',
+    'W.                                    .W',
+    'W........dd...d...............d.....d..W',
+    'W.....MMMMMMMMMMMMMMMMMMMMMMMMMMMM.....W',
+    'W.                                    .W',
+    'W.                                    .W',
+    'W.                                    .W',
+    'W.                                    .W',
+    'W..WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWd..W',
+    'W......................................W',
+    'W.P..............d...................E.W',
+    'WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW',
+  ],
+};

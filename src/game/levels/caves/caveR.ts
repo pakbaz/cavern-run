@@ -1,0 +1,41 @@
+import { DEFAULT_TUNING } from '../../engine/simTypes';
+import type { CaveSpec } from '../caveFormat';
+
+/** R — Choke Point. One corridor. Three fireflies. Good luck. */
+export const caveR: CaveSpec = {
+  ...DEFAULT_TUNING,
+  id: 'caveR',
+  letter: 'R',
+  name: 'Choke Point',
+  paletteId: 'obsidian',
+  hint: 'One corridor. Three fireflies. Good luck.',
+  diamondsRequired: 22,
+  diamondValue: 16,
+  extraDiamondValue: 40,
+  timeLimit: 140,
+  tickHz: 8.5,
+  map: [
+    'WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW',
+    'W......................................W',
+    'W.P.dr  dd  d d  d        d  d   d   d.W',
+    'W...WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW WW.W',
+    'W......................................W',
+    'W......................................W',
+    'W.        fd    r         d   f   d r .W',
+    'W.WW WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW.W',
+    'W......................................W',
+    'W......................................W',
+    'W.       r        dr d   rr          r.W',
+    'W.WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW WW.W',
+    'W......................................W',
+    'W......................................W',
+    'W.    d d           fd   d  r    d    .W',
+    'W.WW WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW.W',
+    'W......................................W',
+    'W......................................W',
+    'W.  d   rd           d d r   dd  d  r .W',
+    'W.WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWd   W',
+    'W................................... E W',
+    'WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW',
+  ],
+};

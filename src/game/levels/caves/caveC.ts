@@ -1,0 +1,41 @@
+import { DEFAULT_TUNING } from '../../engine/simTypes';
+import type { CaveSpec } from '../caveFormat';
+
+/** C — The Gallery. Every vault has a door. Find it before the clock does. */
+export const caveC: CaveSpec = {
+  ...DEFAULT_TUNING,
+  id: 'caveC',
+  letter: 'C',
+  name: 'The Gallery',
+  paletteId: 'glacier',
+  hint: 'Every vault has a door. Find it before the clock does.',
+  diamondsRequired: 15,
+  diamondValue: 10,
+  extraDiamondValue: 25,
+  timeLimit: 150,
+  tickHz: 7.5,
+  map: [
+    'WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW',
+    'W.......d....r................r......r.W',
+    'Wr..........r...............r..........W',
+    'W..rdwwwwwwww..wwwwwwww..wwwwwwww.r....W',
+    'Wr...w      w..w      w..w      w......W',
+    'W....w dddd w..w dddd w..w dddd w..r...W',
+    'W....w dddd w..w dddd w..w dddd w......W',
+    'W....w dddd w..w dddd w..w dddd w......W',
+    'W....w      w..w      w..w      w.....rW',
+    'W....wwww.www..wwww.www..wwww.www......W',
+    'W...................................d..W',
+    'W....................................d.W',
+    'W.r..wwwwwwww.rwwwwwwww..wwwwwwww......W',
+    'W....w      w..w      w..w      w.....rW',
+    'Wr...w dddd w..w dddd w..w dddd w.r....W',
+    'W....w dddd w..w dddd wr.w dddd w......W',
+    'W....w dddd w..w dddd w..w dddd w....r.W',
+    'W....w      w..w      w..w      w......W',
+    'W....wwww.www..wwww.www..wwww.www......W',
+    'W............................r.........W',
+    'W.P....d..................r.........E.dW',
+    'WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW',
+  ],
+};
