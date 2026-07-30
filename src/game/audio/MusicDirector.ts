@@ -277,15 +277,16 @@ export class MusicDirector {
 
     if (gains.lead > 0 && leadPlays(step, this.intensity, theme)) {
       const degree = leadDegree(step, theme, phase);
-      for (const detune of [-5, 5]) {
+      for (const detune of [-4, 4]) {
         this.voice({
           freq: this.freqOf(degree),
           time,
-          duration: spb * 1.5,
-          peak: gains.lead * 0.055,
+          duration: spb * 2.25,
+          peak: gains.lead * 0.065,
           type: theme.leadWave,
-          release: 0.12,
+          release: 0.16,
           detune,
+          attack: 0.03,
         });
       }
     }
