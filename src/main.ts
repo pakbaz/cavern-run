@@ -43,6 +43,10 @@ function createGame(): Phaser.Game {
       keyboard: true,
       gamepad: true,
       touch: true,
+      // Phaser tracks a single touch by default. The grab gesture needs two
+      // fingers at once, and the third slot keeps a stray palm or thumb from
+      // displacing one of them.
+      activePointers: 3,
     },
     // The simulation is driven by an explicit fixed-step accumulator, so
     // Phaser's own physics systems are deliberately left out.
