@@ -7,34 +7,29 @@ import { CAVES } from '../game/levels/index';
 import { canReach, playCave } from './bot';
 
 /**
- * End-to-end proof that caves can actually be won by playing them.
+ * End-to-end proof that every cave can actually be won by playing it.
  *
  * Every other test drives one rule in isolation. These drive the whole stack
  * the way a player does -- birth, movement, digging, collection, the exit
  * opening, walking out -- through the same `update(dt, input)` the keyboard
  * feeds, with no forced outcomes and no writing to the grid.
  *
- * The bot only knows how to walk to the nearest gem and then to the exit, so
- * the caves asserted here are the ones winnable without a deliberate tactic.
- * The later caves expect the player to bomb butterflies, feed a magic wall or
- * wall off an amoeba, which is the point of them, and a router that simply
- * avoids danger cannot do it.
+ * Cave seeds are derived from the cave id, so a win here is the same win a
+ * player gets: the campaign is provably completable, cave by cave, and no
+ * retuning can quietly ship a quota that cannot be met in the time allowed.
  */
 
-const STRAIGHTFORWARD = ['A', 'B', 'C', 'D', 'E', 'F', 'L'] as const;
-
 describe('playing the caves', () => {
-  for (const letter of STRAIGHTFORWARD) {
-    const spec = CAVES.find((cave) => cave.letter === letter);
-
-    it(`cave ${letter} can be played from birth to the exit`, () => {
-      expect(spec).toBeDefined();
-      const run = new CaveSession([spec!], 0, 3);
+  for (const spec of CAVES) {
+    it(`cave ${spec.letter} can be played from birth to the exit`, () => {
+      const run = new CaveSession([spec], 0, 3);
 
       const result = playCave(run);
 
-      expect(result.outcome).toBe(CaveOutcome.Complete);
-      expect(result.diamonds).toBeGreaterThanOrEqual(spec!.diamondsRequired);
+      expect(`${spec.letter}: ${result.outcome} ${result.diamonds}/${spec.diamondsRequired}`).toBe(
+        `${spec.letter}: ${CaveOutcome.Complete} ${result.diamonds}/${spec.diamondsRequired}`,
+      );
+      expect(result.diamonds).toBeGreaterThanOrEqual(spec.diamondsRequired);
       expect(run.simulation.runtime.exitOpen).toBe(true);
     });
   }
@@ -57,7 +52,8 @@ describe('playing the caves', () => {
     // unreachable before the player gets there is unwinnable.
     for (const spec of CAVES) {
       const run = new CaveSession([spec], 0, 3);
-      for (let i = 0; i < 200; i += 1) run.update(run.tickMs);
+      const scans = Math.ceil(spec.timeLimit * spec.tickHz);
+      for (let i = 0; i < scans; i += 1) run.update(run.tickMs);
 
       const exitStandingOpen = canReach(
         run.simulation,
