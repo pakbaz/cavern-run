@@ -40,6 +40,19 @@ const DEVICES: ReadonlyArray<readonly [string, number, number, number]> = [
   ['small embed', 320, 240, 1],
 ];
 
+/** Windows big enough that the game is expected to reach every edge. */
+const DESKTOPS: ReadonlyArray<readonly [string, number, number, number]> = [
+  ['1366x768', 1366, 768, 1],
+  ['laptop', 1440, 900, 2],
+  ['MacBook Pro 14', 1512, 982, 2],
+  ['1080p', 1920, 1080, 1],
+  ['1920x1200', 1920, 1200, 1],
+  ['1440p', 2560, 1440, 1],
+  ['4K', 3840, 2160, 1],
+  ['ultrawide', 3440, 1440, 1],
+  ['iPad landscape', 1180, 820, 2],
+];
+
 describe('computeLayout', () => {
   it('keeps cells big enough to read on every device', () => {
     for (const [name, w, h, dpr] of DEVICES) {
@@ -106,9 +119,42 @@ describe('computeLayout', () => {
   it('caps a huge monitor rather than revealing the whole cave', () => {
     const l = computeLayout(3440, 1440, 1);
 
-    expect(l.tilesW).toBe(MAX_TILES_W);
-    expect(l.tilesH).toBe(MAX_TILES_H);
+    expect(l.tilesW).toBeLessThanOrEqual(MAX_TILES_W);
+    expect(l.tilesH).toBeLessThanOrEqual(MAX_TILES_H);
     expect(l.tilesW).toBeLessThan(CAVE_WIDTH);
+    expect(l.tilesH).toBeLessThan(CAVE_HEIGHT);
+  });
+
+  it('spends a big screen on bigger cells, not on more cave', () => {
+    // Twice the window in each direction. At a fixed zoom that would double
+    // the columns and hand the player most of the cave; the extra room has to
+    // go mostly into cell size instead.
+    const laptop = computeLayout(1280, 720, 1);
+    const huge = computeLayout(2560, 1440, 1);
+
+    expect(huge.tilesW).toBeLessThan(laptop.tilesW * 1.35);
+    expect(cellCss(2560, 1440)).toBeGreaterThan(cellCss(1280, 720) * 1.5);
+  });
+
+  it('fills a desktop window instead of letterboxing it', () => {
+    // A canvas whose shape differs from the window's gets black bars once it
+    // is fitted, which is what made the game look small on a monitor.
+    for (const [name, w, h, dpr] of DESKTOPS) {
+      const l = computeLayout(w, h, dpr);
+      const scale = Math.min(w / l.width, h / l.height);
+      const covered = ((l.width * scale) / w) * ((l.height * scale) / h);
+
+      expect(`${name}: ${covered >= 0.95}`).toBe(`${name}: true`);
+    }
+  });
+
+  it('leaves the phone layouts alone', () => {
+    // Touch play was tuned against these exact figures; widening the desktop
+    // view must not have moved them.
+    expect(computeLayout(375, 667, 2)).toMatchObject({ tilesW: 12, tilesH: 20 });
+    expect(computeLayout(393, 852, 3)).toMatchObject({ tilesW: 12, tilesH: 20 });
+    expect(computeLayout(852, 393, 3)).toMatchObject({ tilesW: 26, tilesH: 11 });
+    expect(computeLayout(412, 915, 2.6)).toMatchObject({ tilesW: 12, tilesH: 20 });
   });
 
   it('stays playable in a tiny frame', () => {

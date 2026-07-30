@@ -1,5 +1,5 @@
 import { CAVE_HEIGHT, CAVE_WIDTH, HUD_HEIGHT, TILE_SIZE, VIEWPORT_TILES_H, VIEWPORT_TILES_W } from './config';
-import { clamp } from './game/render/renderMath';
+import { clamp, lerp, smoothstep } from './game/render/renderMath';
 
 /**
  * How much of the cave to show, and how big to make the canvas.
@@ -11,6 +11,12 @@ import { clamp } from './game/render/renderMath';
  * a comfortable on-screen cell size first and derive the cell counts from it,
  * which makes the answer fall out of the window's shape rather than needing
  * separate portrait and landscape cases.
+ *
+ * Deriving the counts from a cell size is also what fills the window: the
+ * canvas ends up roughly the same shape as the window, so the fitted canvas
+ * has almost nothing left over to letterbox. That only holds while the counts
+ * are the ones the cell size asked for, which is why the cell size below is
+ * pushed up rather than the counts being clipped down.
  */
 
 export interface Layout {
@@ -37,18 +43,36 @@ export const MIN_TILES_H = 9;
 export const MAX_TILES_H = 20;
 
 /**
- * Smallest and largest a cell may appear, in CSS pixels.
+ * Smallest a cell may appear, in CSS pixels.
  *
  * The lower bound is what keeps the art readable and a cell roughly
  * finger-sized on touch. High-density screens can take a slightly smaller
  * cell, because the pixel art still resolves cleanly on them.
+ *
+ * There is deliberately no matching upper bound. A ceiling would mean a big
+ * monitor asking for more columns than `MAX_TILES_W` allows; the surplus used
+ * to be clipped away, which left the canvas a different shape from the window
+ * and a black bar down either side. Letting the cell grow instead spends the
+ * extra room on size rather than on cave.
  */
 const MIN_CELL_CSS = 26;
 const MIN_CELL_CSS_HIDPI = 22;
-const MAX_CELL_CSS = 56;
 
-/** Cells the short edge of the window should span, before clamping. */
-const CELLS_ON_SHORT_EDGE = 12;
+/**
+ * Cells the short edge of the window should span, before clamping.
+ *
+ * A phone is held close and has little room, so it gets the tightest view it
+ * can afford. A desktop monitor is further away and much larger, and at the
+ * phone's zoom it would show a handful of enormous cells, so the count opens
+ * out as the screen grows. The ramp between the two is smooth, so dragging a
+ * window between a laptop screen and an external monitor never jumps.
+ */
+const CELLS_ON_SHORT_EDGE_COMPACT = 12;
+const CELLS_ON_SHORT_EDGE_ROOMY = 15;
+
+/** Short edges, in CSS pixels, that count as a phone and as a desktop. */
+const COMPACT_SHORT_EDGE = 620;
+const ROOMY_SHORT_EDGE = 1000;
 
 /** The layout a desktop browser would have had before any of this existed. */
 export const DEFAULT_LAYOUT: Layout = makeLayout(VIEWPORT_TILES_W, VIEWPORT_TILES_H);
@@ -73,13 +97,25 @@ export function computeLayout(windowW: number, windowH: number, dpr = 1): Layout
   const safeW = Math.max(1, windowW);
   const safeH = Math.max(1, windowH);
 
+  const shortEdge = Math.min(safeW, safeH);
   const minCell = dpr >= 2 ? MIN_CELL_CSS_HIDPI : MIN_CELL_CSS;
+  const maxTilesW = Math.min(MAX_TILES_W, CAVE_WIDTH);
+
   // Size cells against the short edge, so a phone gets chunky cells whichever
   // way up it is held rather than only in landscape.
-  const cell = clamp(Math.min(safeW, safeH) / CELLS_ON_SHORT_EDGE, minCell, MAX_CELL_CSS);
+  const cellsOnShortEdge = lerp(
+    CELLS_ON_SHORT_EDGE_COMPACT,
+    CELLS_ON_SHORT_EDGE_ROOMY,
+    smoothstep(COMPACT_SHORT_EDGE, ROOMY_SHORT_EDGE, shortEdge),
+  );
+  // A cell any smaller than the second term would need more columns than the
+  // cap allows, and the columns that survived would not span the window. On a
+  // wide screen this is what raises the zoom until the cave reaches both
+  // edges; on a phone the cap is nowhere near, so it changes nothing.
+  const cell = Math.max(shortEdge / cellsOnShortEdge, safeW / maxTilesW, minCell);
 
   // The status bar is about one cell tall and scales with everything else.
-  const tilesW = clamp(Math.round(safeW / cell), MIN_TILES_W, Math.min(MAX_TILES_W, CAVE_WIDTH));
+  const tilesW = clamp(Math.round(safeW / cell), MIN_TILES_W, maxTilesW);
   const tilesH = clamp(
     Math.round((safeH - cell) / cell),
     MIN_TILES_H,
