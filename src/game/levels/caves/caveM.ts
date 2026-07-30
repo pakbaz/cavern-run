@@ -1,0 +1,42 @@
+import { DEFAULT_TUNING } from '../../engine/simTypes';
+import type { CaveSpec } from '../caveFormat';
+
+/** M — Slime Pits. Slime lets stone through. Eventually. Never predictably. */
+export const caveM: CaveSpec = {
+  ...DEFAULT_TUNING,
+  id: 'caveM',
+  letter: 'M',
+  name: 'Slime Pits',
+  paletteId: 'sulphur',
+  hint: 'Slime lets stone through. Eventually. Never predictably.',
+  diamondsRequired: 18,
+  diamondValue: 14,
+  extraDiamondValue: 35,
+  timeLimit: 145,
+  tickHz: 8,
+  slimePermeability: 0.18,
+  map: [
+    'WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW',
+    'W......................................W',
+    'W.P....................d............d..W',
+    'W............d.....................d...W',
+    'W......................................W',
+    'W..W r   r   r   r   r   r   r   r  W..W',
+    'W..WSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSW..W',
+    'W.dW   d     d     d     d     d    W..W',
+    'W....................................d.W',
+    'W......................................W',
+    'W..W r   r   r   r   r   r   r   r  W..W',
+    'W..WSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSW..W',
+    'W..W   d     d     d     d     d    W..W',
+    'W......d..................d........d...W',
+    'W...d...........................d......W',
+    'W..W r   r   r   r   r   r   r   r  W..W',
+    'W..WSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSW.dW',
+    'W..W   d     d     d     d     d    W..W',
+    'W.........d...d...d....................W',
+    'W......................................W',
+    'W.........................d..........E.W',
+    'WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW',
+  ],
+};

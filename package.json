@@ -1,0 +1,23 @@
+{
+  "name": "cavern-run",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Cavern Run - 20 caves, one way out. An HTML5 boulder-mining puzzle game.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "phaser": "^4.2.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.2",
+    "vite": "^7.1.5",
+    "vitest": "^3.2.4"
+  }
+}

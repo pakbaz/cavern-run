@@ -1,0 +1,41 @@
+import { DEFAULT_TUNING } from '../../engine/simTypes';
+import type { CaveSpec } from '../caveFormat';
+
+/** G — Butterfly Vault. Butterflies die rich. Drop something heavy on one. */
+export const caveG: CaveSpec = {
+  ...DEFAULT_TUNING,
+  id: 'caveG',
+  letter: 'G',
+  name: 'Butterfly Vault',
+  paletteId: 'verdant',
+  hint: 'Butterflies die rich. Drop something heavy on one.',
+  diamondsRequired: 20,
+  diamondValue: 15,
+  extraDiamondValue: 35,
+  timeLimit: 150,
+  tickHz: 7.5,
+  map: [
+    'WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW',
+    'W......................................W',
+    'W.P.....r.......rr......r.......r......W',
+    'W.......r.......r.......r......rr......W',
+    'W....... ....... ....... ....... .d....W',
+    'W....... ....... ....d.. ....... ......W',
+    'W....... ....... ....d.. ....... ......W',
+    'W.r..www www.www www.www www.www www...W',
+    'W....w     w.w     w.w     w.w     w...W',
+    'Wr...w     w.w     wdw     w.w     w..dW',
+    'W....w     w.w     w.w     w.w     w...W',
+    'W....w  b  wrw  b  w.w  b  w.w  b  w...W',
+    'W....w     w.w     w.w     w.w     w...W',
+    'W....w     w.w     w.w     w.w     w...W',
+    'W....wwwwwww.wwwwwww.wwwwwww.wwwwwww...W',
+    'W................................r.....W',
+    'W..........................r...........W',
+    'W.........r.......r..d....d............W',
+    'W......................................W',
+    'W..................r.....d.............W',
+    'W......................r.............E.W',
+    'WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW',
+  ],
+};
