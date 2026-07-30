@@ -6,6 +6,7 @@ import {
   approachCamera,
   cameraTarget,
   clamp,
+  glowTransform,
   formatScore,
   formatTime,
   interpolate,
@@ -191,5 +192,36 @@ describe('presentation helpers', () => {
     expect(formatScore(0)).toBe('000000');
     expect(formatScore(1234)).toBe('001234');
     expect(formatScore(-1)).toBe('000000');
+  });
+});
+
+describe('glowTransform', () => {
+  // The lamp is stamped onto the darkness sheet, and the stamp is what decides
+  // both how big the light is and where its centre lands. When the scale was
+  // dropped, every light kept its native size while still being offset as if
+  // it had been scaled, so the miner's lamp floated up and to the left of him
+  // and the diamond glows sat off their diamonds.
+  it('draws a one-cell-radius light two cells wide', () => {
+    expect(glowTransform(1, 32, 32).scale).toBe(2);
+  });
+
+  it('scales with the radius', () => {
+    expect(glowTransform(4, 32, 32).scale).toBe(8);
+    expect(glowTransform(0.5, 32, 32).scale).toBe(1);
+  });
+
+  it('accounts for a glow texture that is not one cell across', () => {
+    // A 64px glow already covers two 32px cells, so it needs half the scale.
+    expect(glowTransform(2, 64, 32).scale).toBe(2);
+  });
+
+  it('reports a reach of exactly the radius in pixels', () => {
+    expect(glowTransform(3, 32, 32).reach).toBe(3 * 32);
+    expect(glowTransform(9.5, 32, 32).reach).toBe(9.5 * 32);
+  });
+
+  it('never returns a negative scale', () => {
+    expect(glowTransform(-4, 32, 32).scale).toBe(0);
+    expect(glowTransform(-4, 32, 32).reach).toBe(0);
   });
 });

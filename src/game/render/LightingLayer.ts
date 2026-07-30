@@ -4,10 +4,13 @@ import { Depth, GAME_WIDTH, HUD_HEIGHT, GAME_HEIGHT, TILE_SIZE, type CavePalette
 import type { Cave } from '../engine/Cave';
 import { Tile } from '../engine/tiles';
 import { TextureKey } from './TextureFactory';
-import { clamp, mixColor, smoothstep, visibleTiles } from './renderMath';
+import { clamp, glowTransform, mixColor, smoothstep, visibleTiles } from './renderMath';
 
 const VIEW_W = GAME_WIDTH;
 const VIEW_H = GAME_HEIGHT - HUD_HEIGHT;
+
+/** Side length of the generated glow texture, in pixels. */
+const GLOW_TEXTURE_SIZE = 32;
 
 /**
  * The helmet lamp.
@@ -68,7 +71,7 @@ export class LightingLayer {
 
     // The lamp flickers very slightly so it reads as a real light source.
     const flicker = 1 + Math.sin(ticks * 0.9) * 0.03 + Math.sin(ticks * 2.7) * 0.015;
-    this.punch(playerScreenX - camera.scrollX, playerScreenY - camera.scrollY, 9.5 * flicker);
+    this.punch(playerScreenX - camera.scrollX, playerScreenY - camera.scrollY, 4.4 * flicker);
 
     const range = visibleTiles(camera.scrollX, camera.scrollY, cave.width, cave.height);
     for (let y = range.minY; y <= range.maxY; y += 1) {
@@ -93,11 +96,23 @@ export class LightingLayer {
     this.vignette.destroy();
   }
 
-  /** Erase a soft circle from the darkness sheet. */
+  /** Erase a soft circle from the darkness sheet, centred on (x, y). */
   private punch(x: number, y: number, radiusTiles: number): void {
-    if (x < -100 || y < -100 || x > VIEW_W + 100 || y > VIEW_H + 100) return;
-    const scale = (radiusTiles * TILE_SIZE) / 32;
-    this.darkness.erase(TextureKey.glow, x - (32 * scale) / 2, y - (32 * scale) / 2);
+    const { scale, reach } = glowTransform(radiusTiles, GLOW_TEXTURE_SIZE, TILE_SIZE);
+
+    // Cull by the light's own reach: a big lamp whose centre is just off the
+    // viewport still lights part of it.
+    if (x < -reach || y < -reach || x > VIEW_W + reach || y > VIEW_H + reach) return;
+
+    // `erase` has no scale parameter -- it always blits the texture at native
+    // size -- so the lamp is stamped instead, which can scale and can centre
+    // itself on the light rather than hanging off its top-left corner.
+    this.darkness.stamp(TextureKey.glow, undefined, x, y, {
+      scale,
+      originX: 0.5,
+      originY: 0.5,
+      blendMode: Phaser.BlendModes.ERASE,
+    });
   }
 
   private drawVignette(): void {
@@ -114,17 +129,17 @@ export class LightingLayer {
 }
 
 /**
- * Things that emit their own light, and how far it reaches in cells. The
- * glow on a diamond is what makes them findable in the dark lower caves.
+ * Things that emit their own light, and the radius each one reaches in cells.
+ * The glow on a diamond is what makes them findable in the dark lower caves.
  */
 const GLOW_RADIUS: Readonly<Record<number, number>> = {
-  [Tile.Diamond]: 1.7,
-  [Tile.DiamondFalling]: 1.9,
-  [Tile.ExitOpen]: 3.4,
-  [Tile.ExplosionEmpty]: 3.2,
-  [Tile.ExplosionDiamond]: 3.4,
-  [Tile.Amoeba]: 1.1,
-  [Tile.PlayerBirth]: 4.5,
+  [Tile.Diamond]: 1.3,
+  [Tile.DiamondFalling]: 1.45,
+  [Tile.ExitOpen]: 2.2,
+  [Tile.ExplosionEmpty]: 2.0,
+  [Tile.ExplosionDiamond]: 2.2,
+  [Tile.Amoeba]: 0.85,
+  [Tile.PlayerBirth]: 2.6,
 };
 
 /** Clamp helper re-exported for scenes that dim the lamp during menus. */
