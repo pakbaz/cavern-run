@@ -1,6 +1,10 @@
 # Cavern Run
 
+[![CI](https://github.com/pakbaz/cavern-run/actions/workflows/ci.yml/badge.svg)](https://github.com/pakbaz/cavern-run/actions/workflows/ci.yml)
+
 **20 caves. One way out.**
+
+**[Play it in your browser &rarr;](https://pakbaz.github.io/cavern-run/)**
 
 A browser game in the spirit of the 1984 cave-digging classics: tunnel through
 the dirt, collect the gems before the clock runs dry, and try not to be
@@ -73,9 +77,13 @@ TypeScript, [Phaser 4](https://github.com/phaserjs/phaser), Vite and Vitest.
 
 ```bash
 npm run build       # typecheck, then bundle to dist/
-npm test            # 212 unit tests
+npm test            # 220 unit tests
 npm run typecheck   # types only
 ```
+
+Every push and pull request runs the suite and a full build in GitHub Actions.
+Pushes to `main` that pass then publish `dist/` to GitHub Pages, so what is
+playable is always a build that passed its tests.
 
 The cave simulation in `src/game/engine/` is a pure, deterministic cellular
 automaton with no Phaser import anywhere in it. Every rule &mdash; gravity,
