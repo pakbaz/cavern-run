@@ -55,9 +55,13 @@ export class LightingLayer {
   setPalette(palette: CavePalette, caveIndex: number, caveCount: number): void {
     const depth = caveCount <= 1 ? 0 : caveIndex / (caveCount - 1);
     // Strong enough that the lamp is genuinely the thing you see by, without
-    // ever hiding a boulder about to land on you.
-    this.strength = 0.58 + depth * 0.28;
-    this.tint = mixColor(palette.background, 0x000000, 0.55);
+    // ever hiding a boulder about to land on you. The deepest caves are only
+    // a little darker than the first: past roughly three quarters the sheet
+    // stops reading as gloom and starts reading as a bug.
+    this.strength = 0.5 + depth * 0.19;
+    // Tinting toward the cave's own background rather than crushing to black
+    // leaves the unlit rock legible as rock.
+    this.tint = mixColor(palette.background, 0x000000, 0.38);
   }
 
   /**

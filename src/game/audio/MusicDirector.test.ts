@@ -58,8 +58,10 @@ function fakeContext(log: Recording) {
       detune: param('detune'),
       delayTime: param('delayTime'),
       gain: param('gain'),
+      pan: param('pan'),
       Q: param('Q'),
       type: 'sine',
+      loop: false,
       buffer: null as unknown,
       onended: null,
     };
@@ -73,6 +75,7 @@ function fakeContext(log: Recording) {
     createBiquadFilter: node,
     createDelay: node,
     createBufferSource: node,
+    createStereoPanner: node,
     createBuffer: (_channels: number, frames: number) => ({
       sampleRate: 44100,
       getChannelData: () => new Float32Array(frames),

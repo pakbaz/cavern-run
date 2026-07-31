@@ -110,21 +110,27 @@ sees more of both. Rotating mid-cave keeps the run going.
 
 | | Cave | Gems | Time | | Cave | Gems | Time |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| A | First Descent | 13 | 150 | K | Expanding Ruin | 18 | 140 |
-| B | Rockfall | 13 | 145 | L | Growth Chamber | 20 | 155 |
-| C | The Gallery | 17 | 150 | M | Slime Pits | 18 | 145 |
-| D | Pushing Through | 15 | 140 | N | Double Trouble | 22 | 150 |
-| E | Firefly Warren | 17 | 140 | O | Amoeba Bloom | 24 | 155 |
-| F | Crush Depth | 18 | 135 | P | The Crucible | 24 | 150 |
-| G | Butterfly Vault | 16 | 155 | Q | Nest of Wings | 28 | 150 |
-| H | Magic Seam | 18 | 145 | R | Choke Point | 22 | 140 |
-| I | The Sieve | 20 | 140 | S | Cascade | 26 | 140 |
-| J | Green Tide | 20 | 160 | T | One Way Out | 30 | 165 |
+| A | First Descent | 14 | 140 | K | Expanding Ruin | 20 | 135 |
+| B | Rockfall | 16 | 135 | L | Growth Chamber | 24 | 150 |
+| C | The Gallery | 20 | 140 | M | Slime Pits | 26 | 140 |
+| D | Pushing Through | 20 | 135 | N | Double Trouble | 24 | 145 |
+| E | Firefly Warren | 18 | 135 | O | Amoeba Bloom | 28 | 150 |
+| F | Crush Depth | 20 | 130 | P | The Crucible | 28 | 145 |
+| G | Butterfly Vault | 22 | 145 | Q | Nest of Wings | 30 | 145 |
+| H | Magic Seam | 24 | 140 | R | Choke Point | 26 | 135 |
+| I | The Sieve | 24 | 135 | S | Cascade | 30 | 140 |
+| J | Green Tide | 22 | 150 | T | One Way Out | 32 | 165 |
 
 Each cave introduces one idea and then asks you to combine it with the last
 one. The caves also speed up as you descend: the simulation runs at 7 scans a
-second in the first pair and 9 by the last. The layouts, tuning and names are
-original to this project.
+second in the first pair and 9 by the last.
+
+The layouts are built from structural motifs rather than scattered contents:
+bricked vaults with a single door, boulder rafts resting on the gems you want,
+guard cells you have to open deliberately, hoppers feeding a magic wall,
+sealed amoeba pockets held shut by a plug, and corridors an expanding wall is
+closing behind you. Every layout, quota, clock and name is original to this
+project.
 
 ## How it is built
 
@@ -170,6 +176,22 @@ src/
   test/              headless harness and a bot that plays all 20 caves
 ```
 
+### The look
+
+There are no image files either. `render/TextureFactory.ts` paints every
+sprite into a canvas at boot from one shared lighting model &mdash; a key
+light up and to the left, a cool fill from below &mdash; so a boulder, a
+diamond facet and a steel rivet all catch the light from the same place. Each
+cave recolours the whole set from its palette, which is why twenty caves that
+share one tileset still look like twenty different places.
+
+On top of that the world is drawn in layers: two scrolling strata sheets
+parallax behind the cave at different rates, everything solid casts a soft
+contact shadow, diamonds and the exit get an additive bloom that pulses, and
+boulders roll into the direction they are falling and squash when they land.
+The strata sheets are built from sine terms whose periods divide the sheet
+exactly in both axes, so the backdrop tiles forever without a seam.
+
 ### The soundtrack
 
 The music is written by the game as you play, and every cave gets its own
@@ -178,9 +200,21 @@ swing and timbres, and the twenty themes darken as you descend &mdash; open
 Dorian tunes at the top, airless Locrian ones that never resolve at the bottom
 &mdash; while the tier a cave sits in drops the tonic lower.
 
+A theme also carries its own voicing. The drum kit moves from a felt beater
+and a brushed snare at the top of the campaign to a gated slam at the bottom;
+a sine sub sits under the bass, weighted per cave; a struck FM bell shadows
+the melody an octave up in the caves that should ring; and a band of filtered
+air breathes under everything so the gaps between phrases still sound like a
+cave. The parts are spread across the stereo field &mdash; the pad's detuned
+halves thrown wide, the lead and its counter-line on opposite sides &mdash;
+and the whole score is fed to a convolution reverb built from a synthetic
+impulse with discrete early reflections, which is what tells the ear how far
+apart the walls are.
+
 Inside a cave the piece is then *developed*, in four movements driven by the
 clock. It opens as pad and bass with the motif stated sparsely, then a
-sixteenth-note counter-line arrives and the melody fills in; past halfway the
+sixteenth-note counter-line arrives and the melody fills in, its vibrato
+widening as the cave leans on you; past halfway the
 drums start rolling fills, a seventh sours the pad, the last bar of the loop is
 swapped for a chord that refuses to resolve, and a swell winds up into every
 repeat. For the endgame a dissonant pedal comes in underneath, the bass stops
