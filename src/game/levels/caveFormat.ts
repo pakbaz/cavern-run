@@ -141,7 +141,8 @@ export function validateCave(spec: CaveSpec): string[] {
     problems.push(`${spec.id}: diamondsRequired must be positive`);
   }
 
-  const obtainable = countObtainableDiamonds(counts);
+  const amoebaCredit = amoebaYield(spec, parsed);
+  const obtainable = countObtainableDiamonds(counts, amoebaCredit);
   if (obtainable < spec.diamondsRequired) {
     problems.push(
       `${spec.id}: quota of ${spec.diamondsRequired} exceeds the ${obtainable} diamonds the cave can yield`,
@@ -151,7 +152,7 @@ export function validateCave(spec: CaveSpec): string[] {
   if (spec.timeLimit <= 0) problems.push(`${spec.id}: timeLimit must be positive`);
   if (spec.tickHz <= 0) problems.push(`${spec.id}: tickHz must be positive`);
 
-  problems.push(...checkReachability(spec, parsed));
+  problems.push(...checkReachability(spec, parsed, amoebaCredit));
 
   return problems;
 }
@@ -163,7 +164,7 @@ export function validateCave(spec: CaveSpec): string[] {
  * Static masonry, magic walls, slime and the amoeba block the flood, so a vault
  * that has been accidentally sealed off is caught before it can ship.
  */
-function checkReachability(spec: CaveSpec, parsed: ParsedMap): string[] {
+function checkReachability(spec: CaveSpec, parsed: ParsedMap, amoebaCredit: number): string[] {
   const { width, height, tiles } = parsed;
   const start = tiles.indexOf(Tile.Player);
   if (start < 0) return [];
@@ -208,7 +209,7 @@ function checkReachability(spec: CaveSpec, parsed: ParsedMap): string[] {
     }
   }
 
-  if (touchesAmoeba) reachableDiamonds += AMOEBA_YIELD;
+  if (touchesAmoeba) reachableDiamonds += amoebaCredit;
   if (touchesMagicWall) reachableDiamonds += reachableBoulders;
 
   const problems: string[] = [];
@@ -223,8 +224,54 @@ function checkReachability(spec: CaveSpec, parsed: ParsedMap): string[] {
 
 /** A butterfly's blast clears a 3x3; six diamonds is the conservative take. */
 const BUTTERFLY_YIELD = 6;
-/** A boxed-in amoeba crystallises; twenty diamonds is the conservative take. */
-const AMOEBA_YIELD = 20;
+
+/** Cells the amoeba spreads into, and the tiles it can spread through. */
+const AMOEBA_FOOD: ReadonlySet<TileId> = new Set<TileId>([Tile.Empty, Tile.Dirt, Tile.Amoeba]);
+
+/**
+ * How many diamonds an amoeba can be relied on for -- often none.
+ *
+ * An amoeba only crystallises when it has run out of room to grow. Give it more
+ * space than `amoebaMaxSize` and it hits its ceiling first and turns to stone
+ * instead, which is worth nothing to the player. Cave O once shipped with a
+ * quota that could only be met by an amoeba in a chamber three times its
+ * maximum size, so it was impossible to finish; crediting the amoeba only when
+ * its chamber is genuinely small enough is what stops that recurring.
+ */
+function amoebaYield(spec: CaveSpec, parsed: ParsedMap): number {
+  const { width, height, tiles } = parsed;
+  const seen = new Uint8Array(width * height);
+  const stack: number[] = [];
+
+  for (let i = 0; i < tiles.length; i += 1) {
+    if (tiles[i] === Tile.Amoeba && seen[i] === 0) {
+      seen[i] = 1;
+      stack.push(i);
+    }
+  }
+  if (stack.length === 0) return 0;
+
+  let room = 0;
+  while (stack.length > 0) {
+    const index = stack.pop() as number;
+    room += 1;
+
+    const x = index % width;
+    const y = (index - x) / width;
+
+    for (const [dx, dy] of NEIGHBOURS) {
+      const nx = x + dx;
+      const ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+      const next = ny * width + nx;
+      if (seen[next] === 1 || !AMOEBA_FOOD.has(tiles[next])) continue;
+      seen[next] = 1;
+      stack.push(next);
+    }
+  }
+
+  return room < spec.amoebaMaxSize ? room : 0;
+}
 
 const NEIGHBOURS: ReadonlyArray<readonly [number, number]> = [
   [0, -1],
@@ -265,14 +312,14 @@ function tally(tiles: readonly TileId[]): Map<TileId, number> {
  * cell aside, only the destructible neighbours become diamonds; six is a
  * deliberately conservative estimate.
  */
-function countObtainableDiamonds(counts: Map<TileId, number>): number {
+function countObtainableDiamonds(counts: Map<TileId, number>, amoebaCredit: number): number {
   let total = counts.get(Tile.Diamond) ?? 0;
 
   for (const [tile, count] of counts) {
-    if (isButterfly(tile)) total += count * 6;
+    if (isButterfly(tile)) total += count * BUTTERFLY_YIELD;
   }
 
-  if ((counts.get(Tile.Amoeba) ?? 0) > 0) total += 20;
+  total += amoebaCredit;
   if ((counts.get(Tile.MagicWall) ?? 0) > 0) total += counts.get(Tile.Boulder) ?? 0;
 
   return total;

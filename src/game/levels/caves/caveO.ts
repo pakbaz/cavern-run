@@ -1,14 +1,14 @@
 import { DEFAULT_TUNING } from '../../engine/simTypes';
 import type { CaveSpec } from '../caveFormat';
 
-/** O — Amoeba Bloom. One colony, one shelf of scree, and a decision. */
+/** O — Amoeba Bloom. A colony under glass, a shelf of scree, and a clock. */
 export const caveO: CaveSpec = {
   ...DEFAULT_TUNING,
   id: 'caveO',
   letter: 'O',
   name: 'Amoeba Bloom',
   paletteId: 'sulphur',
-  hint: 'Let it grow too long and the whole cave turns to stone.',
+  hint: 'The bloom is walled in. Mine the ring while it turns itself to stone.',
   diamondsRequired: 28,
   diamondValue: 10,
   extraDiamondValue: 25,
@@ -22,9 +22,9 @@ export const caveO: CaveSpec = {
     'W......................................W',
     'W..rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr..W',
     'W......................................W',
-    'W..................aa..................W',
-    'W......................................W',
-    'W....d...d...d...d...d...d...d...d.....W',
+    'W..wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww..W',
+    'W..w...............aa...............w..W',
+    'W..wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww..W',
     'W......................................W',
     'W..WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW..W',
     'W......................................W',
