@@ -8,10 +8,16 @@
  *
  * Signal flow:
  *
- *     music  -> musicGain  -\
- *                             >-> masterGain -> destination
- *     sfx    -> sfxGain    -/         ^
- *                  \-> reverb -> reverbGain
+ *     music -> musicGain -\
+ *                          >-> masterGain -> destination
+ *     sfx   -> sfxGain   -/         ^
+ *        \        \-> sfxSend  -\    |
+ *         \                      >-> reverb -> reverbGain
+ *          \-> musicSend -------/
+ *
+ * The two buses feed the tail at different depths: sound effects want to
+ * sound like they happened in a big rock chamber, music only wants enough
+ * tail to stop the synths sounding like they were recorded in a cupboard.
  */
 export class AudioEngine {
   private context: AudioContext | null = null;
@@ -20,6 +26,8 @@ export class AudioEngine {
   private sfx: GainNode | null = null;
   private reverb: ConvolverNode | null = null;
   private reverbGain: GainNode | null = null;
+  private musicSend: GainNode | null = null;
+  private sfxSend: GainNode | null = null;
 
   private musicVolume = 0.55;
   private sfxVolume = 0.7;
@@ -85,14 +93,24 @@ export class AudioEngine {
     this.sfx.connect(this.master);
 
     this.reverb = ctx.createConvolver();
-    this.reverb.buffer = makeCaveImpulse(ctx, 1.9, 2.6);
+    this.reverb.buffer = makeCaveImpulse(ctx, 3.1, 2.9);
     this.reverbGain = ctx.createGain();
-    this.reverbGain.gain.value = 0.28;
+    this.reverbGain.gain.value = 0.32;
     this.reverb.connect(this.reverbGain);
     this.reverbGain.connect(this.master);
 
     // A share of the dry sfx bus feeds the tail, so the cave sounds big.
-    this.sfx.connect(this.reverb);
+    this.sfxSend = ctx.createGain();
+    this.sfxSend.gain.value = 1;
+    this.sfx.connect(this.sfxSend);
+    this.sfxSend.connect(this.reverb);
+
+    // The music gets a shallower send: enough room to sit the synths in the
+    // same space as the sound effects, not so much that the groove smears.
+    this.musicSend = ctx.createGain();
+    this.musicSend.gain.value = 0.34;
+    this.music.connect(this.musicSend);
+    this.musicSend.connect(this.reverb);
   }
 
   setMusicVolume(value: number): void {
@@ -145,27 +163,59 @@ export class AudioEngine {
     this.sfx = null;
     this.reverb = null;
     this.reverbGain = null;
+    this.musicSend = null;
+    this.sfxSend = null;
   }
 }
 
 /**
- * A synthetic impulse response: exponentially decaying noise, slightly
- * different per channel so the tail is wide, and low-passed by biasing the
- * noise toward its running average so it sounds like rock rather than static.
+ * A synthetic impulse response for a rock chamber.
+ *
+ * Three parts, summed: a short pre-delay of silence so the dry hit reads
+ * first; a handful of discrete early reflections, which is what actually
+ * tells the ear "stone walls, this far apart"; and an exponentially decaying
+ * diffuse tail. The noise is biased toward its running average so the tail
+ * sounds like rock rather than static, and the two channels use different
+ * reflection times so the space is wide rather than a mono blur.
  */
 function makeCaveImpulse(ctx: AudioContext, seconds: number, decay: number): AudioBuffer {
   const rate = ctx.sampleRate;
   const length = Math.max(1, Math.floor(rate * seconds));
   const buffer = ctx.createBuffer(2, length, rate);
+  const preDelay = Math.floor(rate * 0.017);
+
+  // Seconds out from the dry hit, and how loud each bounce comes back.
+  const reflections: readonly (readonly [number, number])[] = [
+    [0.021, 0.62],
+    [0.037, 0.48],
+    [0.058, 0.4],
+    [0.083, 0.31],
+    [0.119, 0.24],
+    [0.166, 0.18],
+  ];
 
   for (let channel = 0; channel < 2; channel += 1) {
     const data = buffer.getChannelData(channel);
+    // Nudging one channel's geometry keeps the tail from collapsing to mono.
+    const skew = channel === 0 ? 1 : 1.13;
     let smoothed = 0;
-    for (let i = 0; i < length; i += 1) {
+
+    for (let i = preDelay; i < length; i += 1) {
+      const life = (i - preDelay) / (length - preDelay);
       const noise = Math.random() * 2 - 1;
-      smoothed = smoothed * 0.62 + noise * 0.38;
-      const envelope = Math.pow(1 - i / length, decay);
-      data[i] = smoothed * envelope;
+      smoothed = smoothed * 0.66 + noise * 0.34;
+      data[i] = smoothed * Math.pow(1 - life, decay) * 0.7;
+    }
+
+    for (const [offset, level] of reflections) {
+      const at = preDelay + Math.floor(rate * offset * skew);
+      if (at >= length) continue;
+      const sign = Math.random() < 0.5 ? -1 : 1;
+      // Smear each bounce over a few samples so it reads as a surface
+      // rather than a click.
+      for (let i = 0; i < 4 && at + i < length; i += 1) {
+        data[at + i] += sign * level * (1 - i / 4);
+      }
     }
   }
 

@@ -53,6 +53,7 @@ export class RenderLayer {
 
   /** Rebuild anything sized to the window after it changed shape. */
   resize(): void {
+    this.world.resize();
     this.lighting.resize();
   }
 

@@ -39,6 +39,10 @@ interface VoiceOptions {
   readonly detune?: number;
   /** Attack in seconds; long ones let the pad swell instead of stab. */
   readonly attack?: number;
+  /** -1 hard left to 1 hard right. Absent or 0 leaves the voice centred. */
+  readonly pan?: number;
+  /** Cents of pitch wobble, and how fast it wobbles. */
+  readonly vibrato?: { readonly cents: number; readonly rate: number };
 }
 
 /**
@@ -61,6 +65,8 @@ export class MusicDirector {
   private delay: DelayNode | null = null;
   private delayFeedback: GainNode | null = null;
   private noise: AudioBuffer | null = null;
+  private air: AudioBufferSourceNode | null = null;
+  private airGain: GainNode | null = null;
 
   private timer: number | null = null;
   private nextNoteTime = 0;
@@ -113,24 +119,62 @@ export class MusicDirector {
 
     // A tempo-synced echo. Three sixteenths is long enough that the repeats
     // land off the melody rather than smearing it, so the cave answers itself.
+    // The repeats are high-passed so they ring rather than build mud.
     this.delay = ctx.createDelay(1.5);
     this.delay.delayTime.value = 0.3;
     this.delayFeedback = ctx.createGain();
-    this.delayFeedback.gain.value = 0.3;
+    this.delayFeedback.gain.value = 0.32;
+    const delayTone = ctx.createBiquadFilter();
+    delayTone.type = 'highpass';
+    delayTone.frequency.value = 420;
     const delaySend = ctx.createGain();
     delaySend.gain.value = 0.26;
 
     this.filter.connect(this.bus);
     this.filter.connect(delaySend);
     delaySend.connect(this.delay);
-    this.delay.connect(this.delayFeedback);
+    this.delay.connect(delayTone);
+    delayTone.connect(this.delayFeedback);
     this.delayFeedback.connect(this.delay);
     this.delay.connect(this.bus);
     this.bus.connect(musicBus);
 
+    this.startAir();
+
     this.nextNoteTime = ctx.currentTime + 0.08;
     this.running = true;
     this.timer = window.setInterval(() => this.schedule(), MusicDirector.INTERVAL);
+  }
+
+  /**
+   * The cave itself: a slow band of filtered noise under the music, wide and
+   * barely there. It is what stops the gaps between phrases sounding like the
+   * soundtrack simply stopped.
+   */
+  private startAir(): void {
+    const ctx = this.engine.ctx;
+    if (!ctx || !this.bus || this.theme.airMix <= 0) return;
+
+    const source = this.noiseSource(MusicDirector.NOISE_SECONDS);
+    if (!source) return;
+    source.loop = true;
+
+    const band = ctx.createBiquadFilter();
+    band.type = 'bandpass';
+    band.frequency.value = 320;
+    band.Q.value = 0.7;
+
+    const gain = ctx.createGain();
+    gain.gain.value = 0.0001;
+    gain.gain.setTargetAtTime(this.theme.airMix * 0.035, ctx.currentTime, 1.4);
+
+    source.connect(band);
+    band.connect(gain);
+    gain.connect(this.bus);
+    source.start(ctx.currentTime);
+
+    this.air = source;
+    this.airGain = gain;
   }
 
   /**
@@ -146,14 +190,23 @@ export class MusicDirector {
 
     const ctx = this.engine.ctx;
     const bus = this.bus;
-    const nodes = [this.filter, this.delay, this.delayFeedback];
+    const nodes = [this.filter, this.delay, this.delayFeedback, this.airGain];
+    const air = this.air;
     this.bus = null;
     this.filter = null;
     this.delay = null;
     this.delayFeedback = null;
+    this.air = null;
+    this.airGain = null;
     if (!ctx || !bus) return;
 
     const teardown = () => {
+      try {
+        air?.stop();
+      } catch {
+        // Already stopped; the browser throws rather than shrugging.
+      }
+      air?.disconnect();
       bus.disconnect();
       for (const node of nodes) node?.disconnect();
     };
@@ -229,17 +282,18 @@ export class MusicDirector {
         type: theme.bassWave,
         release: 0.06,
       });
-      // A sine doubling the bass at its own pitch once the cave means it:
-      // square and sawtooth waves are thin down here, and an octave lower
-      // would be below hearing.
-      if (phase >= 2 && beat % 4 === 0) {
+      // A sine an octave down, felt more than heard, on the bar's strong
+      // beats. Square and sawtooth waves are thin this low, and the pitch is
+      // floored so a deep cave never drops the sub below hearing.
+      if (beat % 4 === 0 && theme.subMix > 0) {
         this.voice({
-          freq: this.freqOf(degree - 7),
+          freq: Math.max(34, this.freqOf(degree - 14)),
           time,
-          duration: spb * 1.8,
-          peak: gains.bass * 0.12,
+          duration: spb * (phase >= 2 ? 1.8 : 1.2),
+          peak: gains.bass * 0.13 * theme.subMix * (phase >= 2 ? 1 : 0.7),
           type: 'sine',
-          release: 0.08,
+          release: 0.12,
+          attack: 0.02,
         });
       }
     }
@@ -250,7 +304,12 @@ export class MusicDirector {
       // exactly when the cave starts to feel like it is closing in.
       const intervals = phase >= 2 ? [0, 2, 4, 6] : [0, 2, 4];
       for (const interval of intervals) {
-        for (const detune of [-7, 7]) {
+        // The detuned halves are thrown to opposite sides, which is what
+        // makes the pad sound like a chamber rather than a chord.
+        for (const [detune, pan] of [
+          [-7, -0.55],
+          [7, 0.55],
+        ] as const) {
           this.voice({
             freq: this.freqOf(chord + interval),
             time,
@@ -260,6 +319,7 @@ export class MusicDirector {
             release: 0.9,
             detune,
             attack: 0.35,
+            pan,
           });
         }
       }
@@ -277,7 +337,10 @@ export class MusicDirector {
 
     if (gains.lead > 0 && leadPlays(step, this.intensity, theme)) {
       const degree = leadDegree(step, theme, phase);
-      for (const detune of [-4, 4]) {
+      for (const [detune, pan] of [
+        [-4, -0.2],
+        [4, 0.2],
+      ] as const) {
         this.voice({
           freq: this.freqOf(degree),
           time,
@@ -287,7 +350,15 @@ export class MusicDirector {
           release: 0.16,
           detune,
           attack: 0.03,
+          pan,
+          // The wobble deepens and quickens as the cave does, so the tune
+          // sounds increasingly unsteady on its feet.
+          vibrato: { cents: 5 + phase * 4, rate: 4.4 + phase * 1.1 },
         });
+      }
+      // A struck bell an octave up, tracking the melody a beat behind.
+      if (theme.bellMix > 0 && beat % 2 === 0) {
+        this.bell(this.freqOf(degree + 7), time, spb * 3, gains.lead * 0.05 * theme.bellMix);
       }
     }
 
@@ -299,6 +370,8 @@ export class MusicDirector {
         peak: gains.arp * 0.05,
         type: 'triangle',
         release: 0.05,
+        // Opposite the lead, so the two lines stay legible against each other.
+        pan: step % 4 < 2 ? -0.42 : 0.42,
       });
     }
 
@@ -347,6 +420,7 @@ export class MusicDirector {
 
     const { freq, time, duration, peak, type, release } = options;
     const attack = options.attack ?? 0.01;
+    const end = time + duration + release;
 
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
@@ -356,15 +430,125 @@ export class MusicDirector {
 
     gain.gain.setValueAtTime(0.0001, time);
     gain.gain.exponentialRampToValueAtTime(peak, time + attack);
-    gain.gain.exponentialRampToValueAtTime(0.0001, time + duration + release);
+    gain.gain.exponentialRampToValueAtTime(0.0001, end);
 
+    const pan = this.panner(options.pan ?? 0);
     osc.connect(gain);
-    gain.connect(this.filter);
+    if (pan) {
+      gain.connect(pan);
+      pan.connect(this.filter);
+    } else {
+      gain.connect(this.filter);
+    }
+
+    // The wobble rides the oscillator's detune, so it stacks with whatever
+    // chorus detune the caller already asked for.
+    const wobble = options.vibrato ? this.vibrato(options.vibrato, osc, time, end) : null;
+
     osc.start(time);
-    osc.stop(time + duration + release + 0.05);
+    osc.stop(end + 0.05);
     osc.onended = () => {
       osc.disconnect();
       gain.disconnect();
+      pan?.disconnect();
+      wobble?.disconnect();
+    };
+  }
+
+  /**
+   * Stereo placement, where the browser offers it. Everything routes through
+   * whatever this returns, so a context without a panner simply plays the
+   * voice centred instead of failing.
+   */
+  private panner(pan: number): StereoPannerNode | null {
+    const ctx = this.engine.ctx;
+    if (!ctx || pan === 0 || typeof ctx.createStereoPanner !== 'function') return null;
+    const node = ctx.createStereoPanner();
+    node.pan.value = pan < -1 ? -1 : pan > 1 ? 1 : pan;
+    return node;
+  }
+
+  /**
+   * A low-frequency oscillator driving an oscillator's detune. Both the rate
+   * and the depth are set directly rather than scheduled: they are control
+   * values, not notes, and have no business in the audible ramps.
+   */
+  private vibrato(
+    settings: { readonly cents: number; readonly rate: number },
+    target: OscillatorNode,
+    time: number,
+    end: number,
+  ): OscillatorNode | null {
+    const ctx = this.engine.ctx;
+    if (!ctx) return null;
+
+    const lfo = ctx.createOscillator();
+    const depth = ctx.createGain();
+    lfo.type = 'sine';
+    lfo.frequency.value = settings.rate;
+    depth.gain.value = settings.cents;
+
+    lfo.connect(depth);
+    depth.connect(target.detune);
+    lfo.start(time);
+    lfo.stop(end + 0.05);
+    lfo.onended = () => {
+      lfo.disconnect();
+      depth.disconnect();
+    };
+    return lfo;
+  }
+
+  /**
+   * A struck bell: a sine carrier whose pitch is shaken by a second
+   * oscillator at an inharmonic ratio, with the shake dying away much faster
+   * than the note. That is the whole trick behind an FM bell -- a bright
+   * clang that settles into a pure tone.
+   */
+  private bell(freq: number, time: number, duration: number, level: number): void {
+    const ctx = this.engine.ctx;
+    if (!ctx || !this.filter || level <= 0) return;
+
+    const carrier = ctx.createOscillator();
+    const modulator = ctx.createOscillator();
+    const index = ctx.createGain();
+    const gain = ctx.createGain();
+
+    carrier.type = 'sine';
+    carrier.frequency.setValueAtTime(freq, time);
+    modulator.type = 'sine';
+    // 2.76 is far enough off a whole number that the partials never line up
+    // into a chord, which is what makes metal sound like metal.
+    modulator.frequency.value = freq * 2.76;
+    index.gain.value = freq * 1.4;
+    index.gain.setTargetAtTime(0, time, duration * 0.16);
+
+    gain.gain.setValueAtTime(0.0001, time);
+    gain.gain.exponentialRampToValueAtTime(level, time + 0.008);
+    gain.gain.exponentialRampToValueAtTime(0.0001, time + duration);
+
+    modulator.connect(index);
+    index.connect(carrier.frequency);
+    carrier.connect(gain);
+
+    const pan = this.panner(0.35);
+    if (pan) {
+      gain.connect(pan);
+      pan.connect(this.filter);
+    } else {
+      gain.connect(this.filter);
+    }
+
+    carrier.start(time);
+    modulator.start(time);
+    carrier.stop(time + duration + 0.05);
+    modulator.stop(time + duration + 0.05);
+    carrier.onended = () => {
+      carrier.disconnect();
+      modulator.disconnect();
+      index.disconnect();
+      gain.disconnect();
+      pan?.disconnect();
     };
   }
 
@@ -372,31 +556,77 @@ export class MusicDirector {
     const ctx = this.engine.ctx;
     if (!ctx || !this.filter) return;
 
+    // A felt beater is low and slow, a gated one snaps down hard and loud.
+    const [top, bottom, sweep, decay, weight] =
+      this.theme.kit === 'soft'
+        ? [124, 44, 0.15, 0.22, 0.28]
+        : this.theme.kit === 'tight'
+          ? [160, 42, 0.1, 0.17, 0.33]
+          : [210, 38, 0.07, 0.26, 0.38];
+
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.type = 'sine';
-    osc.frequency.setValueAtTime(150, time);
-    osc.frequency.exponentialRampToValueAtTime(42, time + 0.12);
+    osc.frequency.setValueAtTime(top, time);
+    osc.frequency.exponentialRampToValueAtTime(bottom, time + sweep);
 
-    gain.gain.setValueAtTime(level * 0.32, time);
-    gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.18);
+    gain.gain.setValueAtTime(level * weight, time);
+    gain.gain.exponentialRampToValueAtTime(0.0001, time + decay);
 
     osc.connect(gain);
     gain.connect(this.filter);
     osc.start(time);
-    osc.stop(time + 0.22);
+    osc.stop(time + decay + 0.04);
     osc.onended = () => {
       osc.disconnect();
       gain.disconnect();
     };
+
+    // The click that makes a kick audible on small speakers, where none of
+    // the fundamental survives.
+    if (this.theme.kit !== 'soft') {
+      this.noiseBurst(time, 0.014, level * 0.09, 'highpass', 2200);
+    }
   }
 
+  /**
+   * Noise for the wires, a short tuned tone for the body. Without the tone a
+   * synthesized snare is just a puff of air.
+   */
   private snare(time: number, level: number): void {
-    this.noiseBurst(time, 0.13, level * 0.16, 'highpass', 1400);
+    const [length, cut, body] =
+      this.theme.kit === 'soft'
+        ? [0.17, 1100, 0.5]
+        : this.theme.kit === 'tight'
+          ? [0.12, 1600, 0.8]
+          : [0.24, 1900, 1];
+
+    this.noiseBurst(time, length, level * 0.16, 'highpass', cut, this.theme.kit === 'hard' ? 0.3 : 0);
+
+    const ctx = this.engine.ctx;
+    if (!ctx || !this.filter || body <= 0) return;
+
+    for (const freq of [188, 262]) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq, time);
+      gain.gain.setValueAtTime(level * 0.07 * body, time);
+      gain.gain.exponentialRampToValueAtTime(0.0001, time + length * 0.6);
+      osc.connect(gain);
+      gain.connect(this.filter);
+      osc.start(time);
+      osc.stop(time + length);
+      osc.onended = () => {
+        osc.disconnect();
+        gain.disconnect();
+      };
+    }
   }
 
   private hat(time: number, level: number): void {
-    this.noiseBurst(time, 0.045, level * 0.1, 'highpass', 6500);
+    const length = this.theme.kit === 'hard' ? 0.032 : this.theme.kit === 'tight' ? 0.042 : 0.058;
+    this.noiseBurst(time, length, level * 0.1, 'highpass', 6500, 0.55);
   }
 
   /** The crash that lands on the downbeat a riser has been climbing toward. */
@@ -489,6 +719,7 @@ export class MusicDirector {
     peak: number,
     filterType: BiquadFilterType,
     frequency: number,
+    pan = 0,
   ): void {
     const ctx = this.engine.ctx;
     if (!ctx || !this.filter || peak <= 0) return;
@@ -504,14 +735,23 @@ export class MusicDirector {
     gain.gain.setValueAtTime(peak, time);
     gain.gain.exponentialRampToValueAtTime(0.0001, time + duration);
 
+    // Hats and the snare's noise half sit slightly off centre, which is
+    // where a real kit puts them.
+    const panner = this.panner(pan);
     source.connect(biquad);
     biquad.connect(gain);
-    gain.connect(this.filter);
+    if (panner) {
+      gain.connect(panner);
+      panner.connect(this.filter);
+    } else {
+      gain.connect(this.filter);
+    }
     source.start(time, this.noiseOffset(duration), duration);
     source.onended = () => {
       source.disconnect();
       biquad.disconnect();
       gain.disconnect();
+      panner?.disconnect();
     };
   }
 

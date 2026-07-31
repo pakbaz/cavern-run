@@ -50,7 +50,21 @@ export interface CaveTheme {
   readonly leadWave: OscillatorType;
   readonly bassWave: OscillatorType;
   readonly padWave: OscillatorType;
+  /**
+   * How the drums are voiced. `soft` is a felt kick and a brushed snare,
+   * `tight` a punchy studio kit, `hard` a gated slam with a long tail.
+   */
+  readonly kit: DrumKit;
+  /** 0..1 weight of the struck-bell counter-line. Crystalline caves ring. */
+  readonly bellMix: number;
+  /** 0..1 weight of the sine sub under the bass. Deep caves rumble. */
+  readonly subMix: number;
+  /** 0..1 weight of the filtered air bed. Big open caves breathe. */
+  readonly airMix: number;
 }
+
+/** Drum voicings, darkening down the campaign. */
+export type DrumKit = 'soft' | 'tight' | 'hard';
 
 /**
  * Twenty themes, one per cave, ordered to darken across the campaign: open
@@ -77,6 +91,10 @@ export const THEMES: readonly CaveTheme[] = [
     leadWave: 'triangle',
     bassWave: 'square',
     padWave: 'triangle',
+    kit: 'soft',
+    bellMix: 0.85,
+    subMix: 0.25,
+    airMix: 0.55,
   },
   {
     id: 'B',
@@ -97,6 +115,10 @@ export const THEMES: readonly CaveTheme[] = [
     leadWave: 'square',
     bassWave: 'sawtooth',
     padWave: 'triangle',
+    kit: 'soft',
+    bellMix: 0.35,
+    subMix: 0.45,
+    airMix: 0.4,
   },
   {
     id: 'C',
@@ -117,6 +139,10 @@ export const THEMES: readonly CaveTheme[] = [
     leadWave: 'sine',
     bassWave: 'square',
     padWave: 'sine',
+    kit: 'soft',
+    bellMix: 0.9,
+    subMix: 0.3,
+    airMix: 0.7,
   },
   {
     id: 'D',
@@ -137,6 +163,10 @@ export const THEMES: readonly CaveTheme[] = [
     leadWave: 'sawtooth',
     bassWave: 'square',
     padWave: 'triangle',
+    kit: 'soft',
+    bellMix: 0.3,
+    subMix: 0.5,
+    airMix: 0.35,
   },
   {
     id: 'E',
@@ -157,6 +187,10 @@ export const THEMES: readonly CaveTheme[] = [
     leadWave: 'square',
     bassWave: 'square',
     padWave: 'sine',
+    kit: 'soft',
+    bellMix: 0.5,
+    subMix: 0.5,
+    airMix: 0.45,
   },
   {
     id: 'F',
@@ -177,6 +211,10 @@ export const THEMES: readonly CaveTheme[] = [
     leadWave: 'triangle',
     bassWave: 'sawtooth',
     padWave: 'triangle',
+    kit: 'soft',
+    bellMix: 0.25,
+    subMix: 0.6,
+    airMix: 0.3,
   },
   {
     id: 'G',
@@ -197,6 +235,10 @@ export const THEMES: readonly CaveTheme[] = [
     leadWave: 'sine',
     bassWave: 'triangle',
     padWave: 'sine',
+    kit: 'tight',
+    bellMix: 0.75,
+    subMix: 0.45,
+    airMix: 0.6,
   },
   {
     id: 'H',
@@ -217,6 +259,10 @@ export const THEMES: readonly CaveTheme[] = [
     leadWave: 'square',
     bassWave: 'square',
     padWave: 'triangle',
+    kit: 'tight',
+    bellMix: 0.95,
+    subMix: 0.4,
+    airMix: 0.65,
   },
   {
     id: 'I',
@@ -237,6 +283,10 @@ export const THEMES: readonly CaveTheme[] = [
     leadWave: 'sawtooth',
     bassWave: 'square',
     padWave: 'sine',
+    kit: 'tight',
+    bellMix: 0.8,
+    subMix: 0.5,
+    airMix: 0.5,
   },
   {
     id: 'J',
@@ -257,6 +307,10 @@ export const THEMES: readonly CaveTheme[] = [
     leadWave: 'sine',
     bassWave: 'triangle',
     padWave: 'sine',
+    kit: 'tight',
+    bellMix: 0.45,
+    subMix: 0.55,
+    airMix: 0.7,
   },
   {
     id: 'K',
@@ -277,6 +331,10 @@ export const THEMES: readonly CaveTheme[] = [
     leadWave: 'square',
     bassWave: 'sawtooth',
     padWave: 'triangle',
+    kit: 'tight',
+    bellMix: 0.35,
+    subMix: 0.6,
+    airMix: 0.4,
   },
   {
     id: 'L',
@@ -297,6 +355,10 @@ export const THEMES: readonly CaveTheme[] = [
     leadWave: 'sine',
     bassWave: 'square',
     padWave: 'sine',
+    kit: 'tight',
+    bellMix: 0.5,
+    subMix: 0.6,
+    airMix: 0.6,
   },
   {
     id: 'M',
@@ -317,6 +379,10 @@ export const THEMES: readonly CaveTheme[] = [
     leadWave: 'sawtooth',
     bassWave: 'square',
     padWave: 'triangle',
+    kit: 'tight',
+    bellMix: 0.4,
+    subMix: 0.65,
+    airMix: 0.75,
   },
   {
     id: 'N',
@@ -337,6 +403,10 @@ export const THEMES: readonly CaveTheme[] = [
     leadWave: 'square',
     bassWave: 'sawtooth',
     padWave: 'triangle',
+    kit: 'tight',
+    bellMix: 0.55,
+    subMix: 0.65,
+    airMix: 0.45,
   },
   {
     id: 'O',
@@ -357,6 +427,10 @@ export const THEMES: readonly CaveTheme[] = [
     leadWave: 'sine',
     bassWave: 'triangle',
     padWave: 'sine',
+    kit: 'hard',
+    bellMix: 0.45,
+    subMix: 0.7,
+    airMix: 0.7,
   },
   {
     id: 'P',
@@ -377,6 +451,10 @@ export const THEMES: readonly CaveTheme[] = [
     leadWave: 'sawtooth',
     bassWave: 'square',
     padWave: 'triangle',
+    kit: 'hard',
+    bellMix: 0.85,
+    subMix: 0.7,
+    airMix: 0.5,
   },
   {
     id: 'Q',
@@ -397,6 +475,10 @@ export const THEMES: readonly CaveTheme[] = [
     leadWave: 'square',
     bassWave: 'sawtooth',
     padWave: 'sine',
+    kit: 'hard',
+    bellMix: 0.6,
+    subMix: 0.75,
+    airMix: 0.55,
   },
   {
     id: 'R',
@@ -417,6 +499,10 @@ export const THEMES: readonly CaveTheme[] = [
     leadWave: 'square',
     bassWave: 'square',
     padWave: 'triangle',
+    kit: 'hard',
+    bellMix: 0.3,
+    subMix: 0.8,
+    airMix: 0.35,
   },
   {
     id: 'S',
@@ -437,6 +523,10 @@ export const THEMES: readonly CaveTheme[] = [
     leadWave: 'sawtooth',
     bassWave: 'sawtooth',
     padWave: 'sine',
+    kit: 'hard',
+    bellMix: 0.7,
+    subMix: 0.8,
+    airMix: 0.6,
   },
   {
     id: 'T',
@@ -457,6 +547,10 @@ export const THEMES: readonly CaveTheme[] = [
     leadWave: 'sawtooth',
     bassWave: 'square',
     padWave: 'triangle',
+    kit: 'hard',
+    bellMix: 0.9,
+    subMix: 0.9,
+    airMix: 0.8,
   },
 ];
 
