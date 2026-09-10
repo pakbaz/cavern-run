@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 
-import { SceneKey, WORLD_OFFSET_Y } from '../../config';
+import { SceneKey, TILE_SIZE, WORLD_OFFSET_Y } from '../../config';
 import { layout } from '../../layout';
 import { audio } from '../audio/index';
 import { CaveOutcome } from '../engine/simTypes';
@@ -30,6 +30,12 @@ export class GameScene extends Phaser.Scene {
    * stops being "running" the scene acts on it.
    */
   private resolving = false;
+  private readonly onFocusLost = (): void => {
+    if (this.scene.isActive() && !this.resolving) this.pause();
+  };
+  private readonly onVisibility = (): void => {
+    if (document.hidden) this.onFocusLost();
+  };
 
   constructor() {
     super(SceneKey.Game);
@@ -48,7 +54,21 @@ export class GameScene extends Phaser.Scene {
     });
     this.render.setCave(session.spec, session.simulation.cave, session.caveIndex);
 
-    this.controls = new InputManager(this);
+    this.controls = new InputManager(this, {
+      contains: (x, y) => x >= 0 && x < layout().width
+        && y >= WORLD_OFFSET_Y && y < WORLD_OFFSET_Y + layout().worldHeight,
+      playerPosition: () => {
+        const { playerX, playerY } = session.simulation.runtime;
+        const camera = this.cameras.main;
+        return {
+          x: (playerX + 0.5) * TILE_SIZE - camera.scrollX + camera.x,
+          y: (playerY + 0.5) * TILE_SIZE - camera.scrollY + camera.y,
+        };
+      },
+    });
+    this.input.mouse?.disableContextMenu();
+    window.addEventListener('blur', this.onFocusLost);
+    document.addEventListener('visibilitychange', this.onVisibility);
 
     this.resolving = false;
 
@@ -61,6 +81,7 @@ export class GameScene extends Phaser.Scene {
     onLayoutChanged(this, () => {
       this.applyViewport();
       this.render.resize();
+      this.controls.reset();
     });
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.teardown, this);
@@ -75,6 +96,8 @@ export class GameScene extends Phaser.Scene {
   override update(_time: number, delta: number): void {
     const { session } = this.state;
 
+    // Poll gamepad action edges even on frames without a simulation scan.
+    this.controls.sample();
     if (this.controls.consumePause() && !this.resolving) {
       this.pause();
       return;
@@ -85,9 +108,11 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    const input = this.controls.sample();
-    const result = session.update(delta, input);
-    if (result.ticks > 0) this.controls.consumeTick();
+    const result = session.update(delta, () => {
+      const input = this.controls.sample();
+      this.controls.consumeTick();
+      return input;
+    });
 
     audio().sfx.beginFrame();
     audio().sfx.handle(result.events);
@@ -102,6 +127,10 @@ export class GameScene extends Phaser.Scene {
 
     this.updateMusic();
     this.checkOutcome(result.outcome);
+  }
+
+  get isGrabMode(): boolean {
+    return this.controls.isGrabMode;
   }
 
   private updateMusic(): void {
@@ -189,6 +218,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   private teardown(): void {
+    window.removeEventListener('blur', this.onFocusLost);
+    document.removeEventListener('visibilitychange', this.onVisibility);
     this.scene.stop(SceneKey.Hud);
     this.controls.destroy();
     this.render.destroy();

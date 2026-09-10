@@ -1,7 +1,77 @@
 import { describe, expect, it } from 'vitest';
 
 import { Dir } from '../engine/tiles';
-import { DirectionLatch, stickDirection, swipeDirection, touchCommand } from './inputMath';
+import { ButtonEdges, DirectionLatch, PointerBuffer, stickDirection, swipeDirection, touchCommand } from './inputMath';
+
+describe('PointerBuffer', () => {
+  it('retains a short pointer press with its grab modifier until one scan consumes it', () => {
+    const buffer = new PointerBuffer();
+    buffer.set('arrow', Dir.Right, true);
+    buffer.release('arrow');
+    expect(buffer.resolve()).toEqual({ dir: Dir.Right, grab: true });
+    buffer.consume();
+    expect(buffer.resolve()).toEqual({ dir: null, grab: false });
+  });
+
+  it('keeps held controls active but does not add a step after releasing them', () => {
+    const buffer = new PointerBuffer();
+    buffer.set('arrow', Dir.Down);
+    buffer.consume();
+    buffer.set('arrow', Dir.Down);
+    expect(buffer.resolve().dir).toBe(Dir.Down);
+    buffer.release('arrow');
+    expect(buffer.resolve().dir).toBeNull();
+  });
+
+  it('lets the latest pointer win and restores a still-held pointer', () => {
+    const buffer = new PointerBuffer();
+    buffer.set('left-thumb', Dir.Left);
+    buffer.set('right-thumb', Dir.Up);
+    buffer.consume();
+    expect(buffer.resolve().dir).toBe(Dir.Up);
+    buffer.release('right-thumb');
+    expect(buffer.resolve().dir).toBe(Dir.Left);
+  });
+
+  it('cancels movement when a live pointer returns to the dead zone', () => {
+    const buffer = new PointerBuffer();
+    buffer.set('drag', Dir.Up);
+    buffer.set('drag', null);
+    expect(buffer.resolve().dir).toBeNull();
+  });
+
+  it('does not discard another control tap when a stationary finger has no direction', () => {
+    const buffer = new PointerBuffer();
+    buffer.set('arrow', Dir.Right);
+    buffer.release('arrow');
+    buffer.set('gesture', null);
+    expect(buffer.resolve().dir).toBe(Dir.Right);
+  });
+
+  it('clears held and queued commands on pause or focus loss', () => {
+    const buffer = new PointerBuffer();
+    buffer.set('arrow', Dir.Right, true);
+    buffer.clear();
+    expect(buffer.resolve()).toEqual({ dir: null, grab: false });
+  });
+});
+
+describe('ButtonEdges', () => {
+  it('reports a held gamepad action only on its rising edge', () => {
+    const buttons = new ButtonEdges();
+    expect(buttons.press('pause', true)).toBe(true);
+    expect(buttons.press('pause', true)).toBe(false);
+    expect(buttons.press('pause', false)).toBe(false);
+    expect(buttons.press('pause', true)).toBe(true);
+  });
+
+  it('tracks pause and restart independently', () => {
+    const buttons = new ButtonEdges();
+    expect(buttons.press('pause', true)).toBe(true);
+    expect(buttons.press('restart', true)).toBe(true);
+    expect(buttons.press('pause', true)).toBe(false);
+  });
+});
 
 describe('DirectionLatch', () => {
   it('starts idle', () => {

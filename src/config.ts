@@ -25,6 +25,9 @@ export const VIEWPORT_TILES_H = 12;
 /** Height of the status bar above the playfield, in pixels. */
 export const HUD_HEIGHT = 32;
 
+/** Pointer controls have their own strip and never cover cave cells. */
+export const CONTROL_HEIGHT = 64;
+
 /** Vertical pixel offset of the playfield inside the canvas. */
 export const WORLD_OFFSET_Y = HUD_HEIGHT;
 

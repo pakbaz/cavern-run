@@ -1,4 +1,4 @@
-import { CAVE_HEIGHT, CAVE_WIDTH, HUD_HEIGHT, TILE_SIZE, VIEWPORT_TILES_H, VIEWPORT_TILES_W } from './config';
+import { CAVE_HEIGHT, CAVE_WIDTH, CONTROL_HEIGHT, HUD_HEIGHT, TILE_SIZE, VIEWPORT_TILES_H, VIEWPORT_TILES_W } from './config';
 import { clamp, lerp, smoothstep } from './game/render/renderMath';
 
 /**
@@ -26,7 +26,7 @@ export interface Layout {
   /** Canvas size in game pixels, including the status bar. */
   readonly width: number;
   readonly height: number;
-  /** Canvas height below the status bar. */
+  /** Cave viewport height, excluding the status bar and pointer controls. */
   readonly worldHeight: number;
 }
 
@@ -82,7 +82,7 @@ function makeLayout(tilesW: number, tilesH: number): Layout {
     tilesW,
     tilesH,
     width: tilesW * TILE_SIZE,
-    height: tilesH * TILE_SIZE + HUD_HEIGHT,
+    height: tilesH * TILE_SIZE + HUD_HEIGHT + CONTROL_HEIGHT,
     worldHeight: tilesH * TILE_SIZE,
   };
 }
@@ -114,10 +114,10 @@ export function computeLayout(windowW: number, windowH: number, dpr = 1): Layout
   // edges; on a phone the cap is nowhere near, so it changes nothing.
   const cell = Math.max(shortEdge / cellsOnShortEdge, safeW / maxTilesW, minCell);
 
-  // The status bar is about one cell tall and scales with everything else.
+  // Both control strips scale with the cells, outside the visible cave.
   const tilesW = clamp(Math.round(safeW / cell), MIN_TILES_W, maxTilesW);
   const tilesH = clamp(
-    Math.round((safeH - cell) / cell),
+    Math.round(safeH / cell - (HUD_HEIGHT + CONTROL_HEIGHT) / TILE_SIZE),
     MIN_TILES_H,
     Math.min(MAX_TILES_H, CAVE_HEIGHT),
   );

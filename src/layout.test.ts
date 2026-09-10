@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { CAVE_HEIGHT, CAVE_WIDTH, HUD_HEIGHT, TILE_SIZE } from './config';
+import { CAVE_HEIGHT, CAVE_WIDTH, CONTROL_HEIGHT, HUD_HEIGHT, TILE_SIZE } from './config';
 import {
   computeLayout,
   MAX_TILES_H,
@@ -148,12 +148,10 @@ describe('computeLayout', () => {
     }
   });
 
-  it('leaves the phone layouts alone', () => {
-    // Touch play was tuned against these exact figures; widening the desktop
-    // view must not have moved them.
-    expect(computeLayout(375, 667, 2)).toMatchObject({ tilesW: 12, tilesH: 20 });
+  it('reserves room for pointer controls while retaining a useful phone view', () => {
+    expect(computeLayout(375, 667, 2)).toMatchObject({ tilesW: 12, tilesH: 18 });
     expect(computeLayout(393, 852, 3)).toMatchObject({ tilesW: 12, tilesH: 20 });
-    expect(computeLayout(852, 393, 3)).toMatchObject({ tilesW: 26, tilesH: 11 });
+    expect(computeLayout(852, 393, 3)).toMatchObject({ tilesW: 26, tilesH: 9 });
     expect(computeLayout(412, 915, 2.6)).toMatchObject({ tilesW: 12, tilesH: 20 });
   });
 
@@ -177,12 +175,13 @@ describe('computeLayout', () => {
     }
   });
 
-  it('derives the canvas size from the cell counts and the status bar', () => {
+  it('keeps the control dock outside the cave viewport', () => {
     const l = computeLayout(1440, 900, 2);
 
     expect(l.width).toBe(l.tilesW * TILE_SIZE);
     expect(l.worldHeight).toBe(l.tilesH * TILE_SIZE);
-    expect(l.height).toBe(l.worldHeight + HUD_HEIGHT);
+    expect(l.height).toBe(l.worldHeight + HUD_HEIGHT + CONTROL_HEIGHT);
+    expect(CONTROL_HEIGHT).toBeGreaterThanOrEqual(64);
   });
 });
 
