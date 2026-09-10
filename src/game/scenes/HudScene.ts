@@ -70,7 +70,7 @@ export class HudScene extends Phaser.Scene {
   private fullscreen(): void {
     if (this.fullscreenBusy) return;
     this.fullscreenBusy = true;
-    void toggleFullscreen(document.getElementById('game-root') ?? this.game.canvas)
+    void toggleFullscreen()
       .catch((error: unknown) => {
         console.warn('Could not enter fullscreen', error);
         if (!this.sys.isActive()) return;

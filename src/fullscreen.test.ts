@@ -1,7 +1,19 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { toggleFullscreen } from './fullscreen';
 
+afterEach(() => vi.unstubAllGlobals());
+
 describe('native fullscreen', () => {
+  it('keeps the safe-area game container inset by fullscreening the document', async () => {
+    const root = { requestFullscreen: vi.fn().mockResolvedValue(undefined) };
+    vi.stubGlobal('document', {
+      documentElement: root, fullscreenElement: null, fullscreenEnabled: true,
+      exitFullscreen: vi.fn(),
+    });
+    await toggleFullscreen();
+    expect(root.requestFullscreen).toHaveBeenCalledWith({ navigationUI: 'hide' });
+  });
+
   it('requests fullscreen on the whole game container from a user action', async () => {
     const target = { requestFullscreen: vi.fn().mockResolvedValue(undefined) };
     const host = { fullscreenElement: null, fullscreenEnabled: true, exitFullscreen: vi.fn() };

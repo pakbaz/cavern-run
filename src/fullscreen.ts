@@ -10,7 +10,7 @@ interface FullscreenHost {
 
 /** Call directly from a tap or click so the browser retains user activation. */
 export async function toggleFullscreen(
-  target: FullscreenTarget,
+  target: FullscreenTarget = document.documentElement,
   host: FullscreenHost = document,
 ): Promise<void> {
   if (host.fullscreenElement) {

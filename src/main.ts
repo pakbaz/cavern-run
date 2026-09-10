@@ -13,12 +13,9 @@ function dismissBootSplash(): void {
 function windowSize(): { w: number; h: number; dpr: number } {
   const root = document.getElementById('game-root');
   const bounds = root?.getBoundingClientRect();
-  const style = root ? getComputedStyle(root) : null;
-  const insetX = style ? parseFloat(style.paddingLeft) + parseFloat(style.paddingRight) : 0;
-  const insetY = style ? parseFloat(style.paddingTop) + parseFloat(style.paddingBottom) : 0;
   return {
-    w: Math.min(bounds?.width ?? window.innerWidth, window.visualViewport?.width ?? window.innerWidth) - insetX,
-    h: Math.min(bounds?.height ?? window.innerHeight, window.visualViewport?.height ?? window.innerHeight) - insetY,
+    w: Math.min(bounds?.width ?? window.innerWidth, window.visualViewport?.width ?? window.innerWidth),
+    h: Math.min(bounds?.height ?? window.innerHeight, window.visualViewport?.height ?? window.innerHeight),
     dpr: window.devicePixelRatio || 1,
   };
 }

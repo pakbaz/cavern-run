@@ -48,8 +48,8 @@
       #game-root {
         position: fixed;
         inset: 0;
-        /* Keep the canvas clear of notches and home indicators. */
-        padding: env(safe-area-inset-top) env(safe-area-inset-right)
+        /* Insets reduce Phaser's measured parent bounds; padding does not. */
+        inset: env(safe-area-inset-top) env(safe-area-inset-right)
           env(safe-area-inset-bottom) env(safe-area-inset-left);
         display: flex;
         align-items: center;
