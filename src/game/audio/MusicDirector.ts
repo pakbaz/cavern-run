@@ -11,7 +11,9 @@ import {
   keyForCave,
   keyShift,
   layerGains,
+  leadAccent,
   leadDegree,
+  leadLength,
   leadPlays,
   loopSteps,
   midiToFreq,
@@ -77,6 +79,7 @@ export class MusicDirector {
   private intensity = 0;
   private targetIntensity = 0;
   private phase: Phase = 0;
+  private targetPhase: Phase = 0;
   private secondsLeft = 999;
   private running = false;
 
@@ -98,7 +101,10 @@ export class MusicDirector {
     const musicBus = this.engine.musicBus;
     if (!ctx || !musicBus) return;
 
-    this.stop(true);
+    // Let the previous cave leave a short tail under the new downbeat. A hard
+    // disconnect here made level transitions click despite the nominal
+    // crossfade constant.
+    this.stop(false);
 
     this.theme = themeForCave(caveIndex);
     this.key = keyForCave(caveIndex, caveCount);
@@ -106,6 +112,7 @@ export class MusicDirector {
     this.intensity = 0;
     this.targetIntensity = 0;
     this.phase = 0;
+    this.targetPhase = 0;
     this.secondsLeft = 999;
 
     this.filter = ctx.createBiquadFilter();
@@ -227,7 +234,7 @@ export class MusicDirector {
   setState(inputs: IntensityInputs): void {
     this.targetIntensity = intensityOf(inputs);
     this.secondsLeft = inputs.secondsLeft;
-    this.phase = musicPhase(inputs.secondsLeft, inputs.timeLimit);
+    this.targetPhase = musicPhase(inputs.secondsLeft, inputs.timeLimit);
   }
 
   get currentIntensity(): number {
@@ -246,7 +253,8 @@ export class MusicDirector {
 
     // Ease toward the target so a firefly darting past does not snap the
     // tempo; the music should lean into a threat, not flinch at it.
-    this.intensity += (this.targetIntensity - this.intensity) * 0.08;
+    const smoothing = this.targetIntensity > this.intensity ? 0.045 : 0.025;
+    this.intensity += (this.targetIntensity - this.intensity) * smoothing;
     this.filter.frequency.setTargetAtTime(
       filterCutoff(this.intensity, this.phase),
       ctx.currentTime,
@@ -266,13 +274,17 @@ export class MusicDirector {
 
   private playStep(step: number, time: number, spb: number): void {
     const theme = this.theme;
+    // Harmonic and orchestration changes wait for a bar line. This turns
+    // rapidly changing threat readings into musical transitions rather than
+    // instruments flickering on and off halfway through a phrase.
+    if (step % 16 === 0) this.phase = this.targetPhase;
     const phase = this.phase;
     const gains = layerGains(this.intensity, this.secondsLeft, phase);
     const beat = step % 16;
     const loop = loopSteps(theme);
     const position = ((step % loop) + loop) % loop;
 
-    if (gains.bass > 0) {
+    if (gains.bass > 0 && beat % 2 === 0) {
       const degree = bassDegree(step, theme, phase);
       this.voice({
         freq: this.freqOf(degree - 7),
@@ -303,25 +315,19 @@ export class MusicDirector {
       // The seventh only joins for the back half, which sours the harmony
       // exactly when the cave starts to feel like it is closing in.
       const intervals = phase >= 2 ? [0, 2, 4, 6] : [0, 2, 4];
-      for (const interval of intervals) {
-        // The detuned halves are thrown to opposite sides, which is what
-        // makes the pad sound like a chamber rather than a chord.
-        for (const [detune, pan] of [
-          [-7, -0.55],
-          [7, 0.55],
-        ] as const) {
-          this.voice({
-            freq: this.freqOf(chord + interval),
-            time,
-            duration: spb * 15,
-            peak: gains.pad * 0.028,
-            type: theme.padWave,
-            release: 0.9,
-            detune,
-            attack: 0.35,
-            pan,
-          });
-        }
+      for (let index = 0; index < intervals.length; index += 1) {
+        const interval = intervals[index];
+        this.voice({
+          freq: this.freqOf(chord + interval),
+          time,
+          duration: spb * 15,
+          peak: gains.pad * 0.038,
+          type: theme.padWave,
+          release: 0.9,
+          detune: index % 2 === 0 ? -5 : 5,
+          attack: 0.35,
+          pan: index % 2 === 0 ? -0.42 : 0.42,
+        });
       }
       // A shimmering octave above keeps the pad from sounding muddy.
       this.voice({
@@ -337,28 +343,23 @@ export class MusicDirector {
 
     if (gains.lead > 0 && leadPlays(step, this.intensity, theme)) {
       const degree = leadDegree(step, theme, phase);
-      for (const [detune, pan] of [
-        [-4, -0.2],
-        [4, 0.2],
-      ] as const) {
-        this.voice({
-          freq: this.freqOf(degree),
-          time,
-          duration: spb * 2.25,
-          peak: gains.lead * 0.065,
-          type: theme.leadWave,
-          release: 0.16,
-          detune,
-          attack: 0.03,
-          pan,
-          // The wobble deepens and quickens as the cave does, so the tune
-          // sounds increasingly unsteady on its feet.
-          vibrato: { cents: 5 + phase * 4, rate: 4.4 + phase * 1.1 },
-        });
-      }
-      // A struck bell an octave up, tracking the melody a beat behind.
-      if (theme.bellMix > 0 && beat % 2 === 0) {
-        this.bell(this.freqOf(degree + 7), time, spb * 3, gains.lead * 0.05 * theme.bellMix);
+      const accent = leadAccent(step, theme);
+      this.voice({
+        freq: this.freqOf(degree),
+        time,
+        duration: spb * leadLength(step, theme),
+        peak: gains.lead * 0.082 * accent,
+        type: theme.leadWave,
+        release: 0.18,
+        detune: step % 32 < 16 ? -3 : 3,
+        attack: 0.025,
+        pan: step % 32 < 16 ? -0.16 : 0.16,
+        vibrato: { cents: 4 + phase * 2, rate: 4.2 + phase * 0.7 },
+      });
+      // One bell answer at each phrase ending gives the melody a recognisable
+      // punctuation mark without coating every note in metallic transients.
+      if (theme.bellMix > 0 && beat === theme.rhythm[theme.rhythm.length - 1]) {
+        this.bell(this.freqOf(degree + 7), time, spb * 3.4, gains.lead * 0.045 * theme.bellMix);
       }
     }
 
@@ -382,9 +383,10 @@ export class MusicDirector {
       if (hit.hat && gains.hats > 0) this.hat(time, gains.hats);
     }
 
-    // Two bars out from the top of the loop, start winding the spring.
-    if (gains.riser > 0 && position === loop - 32) {
-      this.riser(time, spb * 32, gains.riser);
+    // A one-bar swell marks the turnaround without filling half the phrase
+    // with an ever-present alarm.
+    if (gains.riser > 0 && position === loop - 16) {
+      this.riser(time, spb * 16, gains.riser);
     }
 
     if (position === 0) {
@@ -398,7 +400,7 @@ export class MusicDirector {
         freq: tickerFreq(this.secondsLeft),
         time,
         duration: 0.07,
-        peak: 0.09,
+        peak: 0.09 * gains.ticker,
         type: 'square',
         release: 0.01,
       });

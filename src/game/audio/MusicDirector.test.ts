@@ -14,6 +14,8 @@ interface Recording {
   freqs: number[];
   gains: number[];
   nodes: number;
+  disconnects: number;
+  starts: number[];
 }
 
 function assertUsable(name: string, value: number, time: number): void {
@@ -49,9 +51,12 @@ function fakeContext(log: Recording) {
     log.nodes += 1;
     return {
       connect() {},
-      disconnect() {},
+      disconnect() {
+        log.disconnects += 1;
+      },
       start(when: number) {
         assertUsable('start', when, when);
+        log.starts.push(when);
       },
       stop() {},
       frequency: param('frequency'),
@@ -84,11 +89,14 @@ function fakeContext(log: Recording) {
 }
 
 /** The director schedules through `window`; node has no such thing. */
-function stubWindow(): void {
+function stubWindow(timeouts: Array<() => void> = []): void {
   (globalThis as unknown as { window: unknown }).window = {
     setInterval: () => 1,
     clearInterval: () => {},
-    setTimeout: () => 1,
+    setTimeout: (callback: () => void) => {
+      timeouts.push(callback);
+      return 1;
+    },
   };
 }
 
@@ -99,7 +107,7 @@ afterEach(() => {
 describe('MusicDirector', () => {
   it('plays every cave from first movement to last without a bad value', () => {
     stubWindow();
-    const log: Recording = { freqs: [], gains: [], nodes: 0 };
+    const log: Recording = { freqs: [], gains: [], nodes: 0, disconnects: 0, starts: [] };
     const ctx = fakeContext(log);
     const engine = { ctx, musicBus: { connect() {}, disconnect() {} }, unlock() {} };
 
@@ -158,5 +166,86 @@ describe('MusicDirector', () => {
       });
       director.stop();
     }).not.toThrow();
+  });
+
+  it('crossfades a restarted cave instead of disconnecting the old score', () => {
+    const timeouts: Array<() => void> = [];
+    stubWindow(timeouts);
+    const log: Recording = { freqs: [], gains: [], nodes: 0, disconnects: 0, starts: [] };
+    const ctx = fakeContext(log);
+    const engine = { ctx, musicBus: { connect() {}, disconnect() {} }, unlock() {} };
+    const director = new MusicDirector(engine as never);
+
+    director.start(0, 20);
+    director.start(1, 20);
+
+    expect(log.disconnects).toBe(0);
+    expect(timeouts).toHaveLength(1);
+
+    timeouts[0]();
+    expect(log.disconnects).toBeGreaterThan(0);
+  });
+
+  it('waits for a bar line before changing musical phase', () => {
+    stubWindow();
+    const log: Recording = { freqs: [], gains: [], nodes: 0, disconnects: 0, starts: [] };
+    const ctx = fakeContext(log);
+    const engine = { ctx, musicBus: { connect() {}, disconnect() {} }, unlock() {} };
+    const director = new MusicDirector(engine as never);
+    director.start(0, 20);
+    director.setState({
+      difficulty: 0,
+      secondsLeft: 150,
+      timeLimit: 150,
+      diamondsCollected: 0,
+      diamondsRequired: 10,
+      threatDistance: Number.POSITIVE_INFINITY,
+    });
+    (director as unknown as { schedule: () => void }).schedule();
+
+    director.setState({
+      difficulty: 1,
+      secondsLeft: 5,
+      timeLimit: 150,
+      diamondsCollected: 0,
+      diamondsRequired: 10,
+      threatDistance: 1,
+    });
+    ctx.currentTime = 0.15;
+    (director as unknown as { schedule: () => void }).schedule();
+    expect(director.currentPhase).toBe(0);
+
+    ctx.currentTime = 3;
+    (director as unknown as { schedule: () => void }).schedule();
+    expect(director.currentPhase).toBe(3);
+  });
+
+  it('renders a complete phrase with headroom and open sixteenth-note space', () => {
+    stubWindow();
+    const log: Recording = { freqs: [], gains: [], nodes: 0, disconnects: 0, starts: [] };
+    const ctx = fakeContext(log);
+    const engine = { ctx, musicBus: { connect() {}, disconnect() {} }, unlock() {} };
+    const director = new MusicDirector(engine as never);
+    const theme = themeForCave(0);
+    const stepSeconds = 0.14;
+    director.start(0, 20);
+
+    log.gains = [];
+    log.starts = [];
+    (director as unknown as { intensity: number }).intensity = 0.5;
+    for (let step = 0; step < loopSteps(theme); step += 1) {
+      (director as unknown as {
+        playStep: (step: number, time: number, stepSeconds: number) => void;
+      }).playStep(step, 1 + step * stepSeconds, stepSeconds);
+    }
+
+    const startsPerStep = Array.from({ length: loopSteps(theme) }, (_, step) => {
+      const at = 1 + step * stepSeconds;
+      return log.starts.filter((time) => Math.abs(time - at) < 0.00001).length;
+    });
+
+    expect(startsPerStep.filter((count) => count === 0).length).toBeGreaterThanOrEqual(16);
+    expect(Math.max(...startsPerStep)).toBeLessThanOrEqual(12);
+    expect(Math.max(...log.gains)).toBeLessThanOrEqual(0.5);
   });
 });

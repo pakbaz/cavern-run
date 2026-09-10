@@ -9,7 +9,7 @@
  * Signal flow:
  *
  *     music -> musicGain -\
- *                          >-> masterGain -> destination
+ *                          >-> masterGain -> compressor -> destination
  *     sfx   -> sfxGain   -/         ^
  *        \        \-> sfxSend  -\    |
  *         \                      >-> reverb -> reverbGain
@@ -22,6 +22,7 @@
 export class AudioEngine {
   private context: AudioContext | null = null;
   private master: GainNode | null = null;
+  private compressor: DynamicsCompressorNode | null = null;
   private music: GainNode | null = null;
   private sfx: GainNode | null = null;
   private reverb: ConvolverNode | null = null;
@@ -32,6 +33,8 @@ export class AudioEngine {
   private musicVolume = 0.55;
   private sfxVolume = 0.7;
   private muted = false;
+  private wantsRunning = false;
+  private transitionPending: Promise<void> | null = null;
 
   /** True once the context exists and is actually running. */
   get ready(): boolean {
@@ -76,13 +79,21 @@ export class AudioEngine {
       this.build(this.context);
     }
 
-    if (this.context.state === 'suspended') void this.context.resume();
+    this.wantsRunning = true;
+    this.reconcileContextState();
   }
 
   private build(ctx: AudioContext): void {
     this.master = ctx.createGain();
     this.master.gain.value = this.muted ? 0 : 1;
-    this.master.connect(ctx.destination);
+    this.compressor = ctx.createDynamicsCompressor();
+    this.compressor.threshold.value = -18;
+    this.compressor.knee.value = 18;
+    this.compressor.ratio.value = 4;
+    this.compressor.attack.value = 0.006;
+    this.compressor.release.value = 0.22;
+    this.master.connect(this.compressor);
+    this.compressor.connect(ctx.destination);
 
     this.music = ctx.createGain();
     this.music.gain.value = this.musicVolume;
@@ -95,20 +106,20 @@ export class AudioEngine {
     this.reverb = ctx.createConvolver();
     this.reverb.buffer = makeCaveImpulse(ctx, 3.1, 2.9);
     this.reverbGain = ctx.createGain();
-    this.reverbGain.gain.value = 0.32;
+    this.reverbGain.gain.value = 0.25;
     this.reverb.connect(this.reverbGain);
     this.reverbGain.connect(this.master);
 
     // A share of the dry sfx bus feeds the tail, so the cave sounds big.
     this.sfxSend = ctx.createGain();
-    this.sfxSend.gain.value = 1;
+    this.sfxSend.gain.value = 0.72;
     this.sfx.connect(this.sfxSend);
     this.sfxSend.connect(this.reverb);
 
     // The music gets a shallower send: enough room to sit the synths in the
     // same space as the sound effects, not so much that the groove smears.
     this.musicSend = ctx.createGain();
-    this.musicSend.gain.value = 0.34;
+    this.musicSend.gain.value = 0.22;
     this.music.connect(this.musicSend);
     this.musicSend.connect(this.reverb);
   }
@@ -148,23 +159,56 @@ export class AudioEngine {
 
   /** Pause the whole graph, e.g. when the tab loses focus. */
   suspend(): void {
-    if (this.context && this.context.state === 'running') void this.context.suspend();
+    this.wantsRunning = false;
+    this.reconcileContextState();
   }
 
   resume(): void {
-    if (this.context && this.context.state === 'suspended') void this.context.resume();
+    this.wantsRunning = true;
+    this.reconcileContextState();
   }
 
   destroy(): void {
-    void this.context?.close();
+    void this.context?.close().catch(() => {});
+    this.wantsRunning = false;
+    this.transitionPending = null;
     this.context = null;
     this.master = null;
+    this.compressor = null;
     this.music = null;
     this.sfx = null;
     this.reverb = null;
     this.reverbGain = null;
     this.musicSend = null;
     this.sfxSend = null;
+  }
+
+  private reconcileContextState(): void {
+    const ctx = this.context;
+    if (!ctx || this.transitionPending || ctx.state === 'closed') return;
+
+    let transition: Promise<void> | null = null;
+    if (this.wantsRunning && ctx.state === 'suspended') transition = ctx.resume();
+    if (!this.wantsRunning && ctx.state === 'running') transition = ctx.suspend();
+    if (!transition) return;
+
+    this.transitionPending = transition;
+    void transition.then(
+      () => this.finishTransition(ctx, transition, true),
+      () => this.finishTransition(ctx, transition, false),
+    );
+  }
+
+  private finishTransition(
+    ctx: AudioContext,
+    transition: Promise<void>,
+    succeeded: boolean,
+  ): void {
+    if (this.transitionPending !== transition) return;
+    this.transitionPending = null;
+    // A rejected browser transition waits for a later gesture/focus event.
+    // Successful stale work is immediately reconciled with the latest intent.
+    if (succeeded && this.context === ctx) this.reconcileContextState();
   }
 }
 

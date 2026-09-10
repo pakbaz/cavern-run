@@ -209,34 +209,21 @@ exactly in both axes, so the backdrop tiles forever without a seam.
 
 ### The soundtrack
 
-The music is written by the game as you play, and every cave gets its own
-piece. A cave's theme fixes its mode, chord progression, melodic motif, groove,
-swing and timbres, and the twenty themes darken as you descend &mdash; open
-Dorian tunes at the top, airless Locrian ones that never resolve at the bottom
-&mdash; while the tier a cave sits in drops the tonic lower.
+Each cave has an original synthesized theme with its own mode, chords, motif,
+groove and instruments. Four-bar phrases vary their note lengths and accents,
+with rests and answering phrases instead of a continuous stream of notes.
+The themes gradually darken as the campaign descends.
 
-A theme also carries its own voicing. The drum kit moves from a felt beater
-and a brushed snare at the top of the campaign to a gated slam at the bottom;
-a sine sub sits under the bass, weighted per cave; a struck FM bell shadows
-the melody an octave up in the caves that should ring; and a band of filtered
-air breathes under everything so the gaps between phrases still sound like a
-cave. The parts are spread across the stereo field &mdash; the pad's detuned
-halves thrown wide, the lead and its counter-line on opposite sides &mdash;
-and the whole score is fed to a convolution reverb built from a synthetic
-impulse with discrete early reflections, which is what tells the ear how far
-apart the walls are.
+The arrangement develops with the clock and nearby danger. Intensity changes
+smoothly, and larger arrangement changes wait for a bar boundary. Early
+exploration leaves space between the melody, bass and pads; the final seconds
+bring stronger percussion and a countdown motif. Tempo ranges and layer gains
+are restrained so a passing creature does not make the whole score frantic.
 
-Inside a cave the piece is then *developed*, in four movements driven by the
-clock. It opens as pad and bass with the motif stated sparsely, then a
-sixteenth-note counter-line arrives and the melody fills in, its vibrato
-widening as the cave leans on you; past halfway the
-drums start rolling fills, a seventh sours the pad, the last bar of the loop is
-swapped for a chord that refuses to resolve, and a swell winds up into every
-repeat. For the endgame a dissonant pedal comes in underneath, the bass stops
-arpeggiating and hammers the root, and the whole tune is winched up a semitone.
-Layered on top of that, the arrangement reacts to how much trouble you are in:
-tempo, brightness and the drums all follow the nearest hazard and the diamonds
-you still owe, and a ticking layer counts out the final ten seconds.
+Stereo placement, a synthetic cave reverb and a mix compressor give the sounds
+depth while keeping the melody and gameplay cues clear. Music changes
+crossfade; diamond collection, magic-wall conversion and opening the exit
+have distinct cues. The soundtrack and effects use no third-party recordings.
 
 ### Saved data
 

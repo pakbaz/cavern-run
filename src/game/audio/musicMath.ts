@@ -167,7 +167,10 @@ export function intensityOf(inputs: IntensityInputs): number {
     ? clamp(1 - inputs.threatDistance / THREAT_RANGE, 0, 1)
     : 0;
 
-  let intensity = 0.16 * difficulty + 0.36 * tension + 0.16 * quotaLeft + 0.32 * threat;
+  // Nearby danger matters, but it should colour the score rather than make
+  // every passing creature sound like the final ten seconds. The clock owns
+  // the long arc; quota and threat add shorter waves inside it.
+  let intensity = 0.12 * difficulty + 0.44 * tension + 0.1 * quotaLeft + 0.28 * threat;
 
   // The clock overrides everything else once it gets short.
   if (inputs.secondsLeft <= TIME_PRESSURE_SECONDS) intensity = Math.max(intensity, 0.62);
@@ -219,15 +222,15 @@ export interface LayerGains {
 export function layerGains(intensity: number, secondsLeft: number, phase: Phase): LayerGains {
   const i = clamp(intensity, 0, 1);
   return {
-    pad: (0.28 + clamp(1 - i * 1.1, 0, 1) * 0.72) * 0.5,
-    bass: 0.5 + i * 0.35,
-    lead: ramp(i, 0.08, 0.32) * (0.45 + i * 0.3),
-    arp: phase >= 1 ? ramp(i, 0.26, 0.6) * (0.28 + phase * 0.06) : 0,
-    drums: ramp(i, 0.22, 0.5) * (0.4 + i * 0.45),
-    hats: ramp(i, 0.45, 0.7) * 0.4,
-    riser: phase >= 2 ? 0.45 + (phase - 2) * 0.35 : 0,
-    drone: phase >= 3 ? 0.7 : phase >= 2 ? 0.22 : 0,
-    ticker: secondsLeft <= TIME_CRITICAL_SECONDS ? 1 : 0,
+    pad: (0.38 + clamp(1 - i, 0, 1) * 0.62) * 0.52,
+    bass: 0.46 + i * 0.27,
+    lead: ramp(i, 0.06, 0.3) * (0.42 + i * 0.25),
+    arp: phase >= 1 ? ramp(i, 0.3, 0.66) * (0.2 + phase * 0.05) : 0,
+    drums: ramp(i, 0.28, 0.58) * (0.34 + i * 0.36),
+    hats: ramp(i, 0.54, 0.78) * 0.3,
+    riser: phase >= 3 ? 0.38 : phase >= 2 ? 0.22 : 0,
+    drone: phase >= 3 ? 0.38 : phase >= 2 ? 0.1 : 0,
+    ticker: secondsLeft <= TIME_CRITICAL_SECONDS ? 0.68 : 0,
   };
 }
 
@@ -298,21 +301,28 @@ function motifSlot(theme: CaveTheme, beat: number): number {
 function melodicContour(theme: CaveTheme, bar: number, beat: number, slot: number, phase: Phase): number {
   const cell = theme.motif;
   const base = cell[slot % cell.length];
-  const step = (slot + bar) % 2;
+  const centre = cell[0];
 
   let contour = base;
   switch (bar % 4) {
     case 0:
-      contour = base + (beat > 8 ? 1 : 0);
+      // State the cave's recognisable cell plainly.
+      contour = base;
       break;
     case 1:
-      contour = base + 1 + step;
+      // Echo it, lifting only the tail so it feels like a response.
+      contour = base + (slot >= Math.ceil(cell.length / 2) ? 1 : 0);
       break;
     case 2:
-      contour = base - (step === 0 ? 1 : 0);
+      // Invert the contour around its opening note.
+      contour = centre - (base - centre) + 1;
       break;
     default:
-      contour = base + (slot >= 2 ? -1 : 1) + (phase >= 2 ? 1 : 0);
+      // Answer the phrase and return its final note to the chord.
+      contour =
+        slot === theme.rhythm.length - 1
+          ? 0
+          : base + (slot % 2 === 0 ? 1 : 0) + (phase >= 2 && beat >= 8 ? 1 : 0);
       break;
   }
 
@@ -323,9 +333,9 @@ function melodicContour(theme: CaveTheme, bar: number, beat: number, slot: numbe
 /**
  * The melody.
  *
- * Each bar develops the theme's motif rather than repeating it: bar two is the
- * same shape a step higher, bar three turns it upside down, bar four sequences
- * it and falls back to close. That is what makes a cave sound like a tune
+ * Each bar develops the theme's motif rather than repeating it: bar two lifts
+ * the tail as an answer, bar three turns it upside down, and bar four returns
+ * to the chord to close. That is what makes a cave sound like a tune
  * instead of a pattern, and it stays entirely deterministic, so a cave always
  * plays the same one.
  */
@@ -351,11 +361,40 @@ export function leadPlays(step: number, intensity: number, theme: CaveTheme): bo
   const beat = beatOf(step);
   const slot = theme.rhythm.indexOf(beat);
 
-  if (slot >= 0) return intensity >= 0.1 && (intensity >= 0.45 || slot === 0 || slot === theme.rhythm.length - 1);
-  if (beat % 8 === 0) return intensity >= 0.72;
-  if (intensity < 0.2) return bar % 2 === 0 && slot % 2 === 0;
-  if (intensity < 0.5) return slot % 2 === 0;
-  return slot === 0 || slot === theme.rhythm.length - 1 || beat % 8 === 0;
+  if (intensity < 0.08) return false;
+
+  // At rest the tune is a call and answer with a whole middle bar left open.
+  // More notes fill in as pressure rises, but the inverted third bar remains
+  // deliberately sparse so the phrase keeps breathing.
+  if (slot >= 0) {
+    if (intensity < 0.32) {
+      return bar !== 2 && (slot === 0 || slot === theme.rhythm.length - 1);
+    }
+    if (intensity < 0.68) {
+      return bar !== 2 || slot === 0 || slot === theme.rhythm.length - 1;
+    }
+    return true;
+  }
+
+  // One passing note per bar is enough even in panic; the counter-line and
+  // drums already carry the extra motion.
+  return intensity >= 0.88 && beat === 8 && bar !== 2;
+}
+
+/** Dynamic shape for a melody note: phrase openings and endings read clearly. */
+export function leadAccent(step: number, theme: CaveTheme): number {
+  const beat = beatOf(step);
+  const slot = theme.rhythm.indexOf(beat);
+  if (slot === 0) return 1;
+  if (slot === theme.rhythm.length - 1) return 0.9;
+  return beat >= 8 ? 0.72 : 0.8;
+}
+
+/** Note length in sixteenth steps, with room after each phrase ending. */
+export function leadLength(step: number, theme: CaveTheme): number {
+  const beat = beatOf(step);
+  const slot = theme.rhythm.indexOf(beat);
+  return slot === theme.rhythm.length - 1 ? 2.8 : slot === 0 ? 1.9 : 1.35;
 }
 
 /** The counter-line that runs under the melody once a cave gets going. */
@@ -369,9 +408,9 @@ export function arpDegree(step: number, theme: CaveTheme, phase: Phase): number 
 export function arpPlays(step: number, phase: Phase): boolean {
   const beat = beatOf(step);
   if (phase <= 0) return false;
-  if (phase === 1) return beat % 4 === 2;
-  if (phase === 2) return beat % 2 === 1;
-  return true;
+  if (phase === 1) return beat === 6 || beat === 14;
+  if (phase === 2) return beat % 4 === 2;
+  return beat % 2 === 1;
 }
 
 export interface DrumHit {
@@ -388,7 +427,10 @@ export function drumsAt(step: number, intensity: number, theme: CaveTheme, phase
   const beat = beatOf(step);
 
   const busy = intensity > 0.65;
-  const fill = phase >= 2 && bar === bars - 1 && beat >= (phase >= 3 ? 12 : 14);
+  const fill =
+    phase >= 2 &&
+    bar === bars - 1 &&
+    (phase >= 3 ? beat === 12 || beat >= 14 : beat === 14);
 
   return {
     kick: theme.kicks.includes(beat) || (busy && !fill && beat === 14),

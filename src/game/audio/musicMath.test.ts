@@ -18,7 +18,9 @@ import {
   keyForCave,
   keyShift,
   layerGains,
+  leadAccent,
   leadDegree,
+  leadLength,
   leadPlays,
   loopSteps,
   midiToFreq,
@@ -122,7 +124,7 @@ describe('cave themes', () => {
       expect(theme.swing).toBeGreaterThanOrEqual(0);
       expect(theme.swing).toBeLessThanOrEqual(0.4);
       expect(theme.baseTempo).toBeGreaterThan(60);
-      expect(theme.baseTempo + theme.tempoSpan).toBeLessThan(200);
+      expect(theme.baseTempo + theme.tempoSpan).toBeLessThanOrEqual(160);
       expect(Math.abs(theme.rootOffset)).toBeLessThanOrEqual(1);
 
       for (const beat of [...theme.rhythm, ...theme.kicks, ...theme.snares]) {
@@ -328,7 +330,7 @@ describe('layers', () => {
 
   it('only starts the ticker in the final seconds', () => {
     expect(layerGains(0.9, TIME_CRITICAL_SECONDS + 1, 3).ticker).toBe(0);
-    expect(layerGains(0.9, TIME_CRITICAL_SECONDS, 3).ticker).toBe(1);
+    expect(layerGains(0.9, TIME_CRITICAL_SECONDS, 3).ticker).toBeGreaterThan(0);
   });
 
   it('raises the ticker pitch as the clock empties', () => {
@@ -414,8 +416,26 @@ describe('melody', () => {
 
   it('lands the melody on the beats its theme asks for', () => {
     for (const theme of THEMES) {
-      for (const beat of theme.rhythm) expect(leadPlays(beat, 0.6, theme)).toBe(true);
+      for (const beat of theme.rhythm) expect(leadPlays(beat, 0.8, theme)).toBe(true);
     }
+  });
+
+  it('leaves breathing room in the inverted third bar until pressure is high', () => {
+    const middleNotes = themeA.rhythm
+      .slice(1, -1)
+      .map((beat) => 2 * STEPS_PER_BAR + beat);
+
+    expect(middleNotes.some((step) => leadPlays(step, 0.5, themeA))).toBe(false);
+    expect(middleNotes.every((step) => leadPlays(step, 0.8, themeA))).toBe(true);
+  });
+
+  it('shapes phrase openings and endings instead of machine-gunning equal notes', () => {
+    const first = themeA.rhythm[0];
+    const middle = themeA.rhythm[1];
+    const last = themeA.rhythm[themeA.rhythm.length - 1];
+
+    expect(leadAccent(first, themeA)).toBeGreaterThan(leadAccent(middle, themeA));
+    expect(leadLength(last, themeA)).toBeGreaterThan(leadLength(middle, themeA));
   });
 });
 
@@ -428,6 +448,7 @@ describe('counter-line and drums', () => {
     expect(count(1)).toBeGreaterThan(0);
     expect(count(2)).toBeGreaterThan(count(1));
     expect(count(3)).toBeGreaterThan(count(2));
+    expect(count(3)).toBeLessThanOrEqual(STEPS_PER_BAR / 2);
   });
 
   it('keeps the counter-line on the chord under it', () => {
