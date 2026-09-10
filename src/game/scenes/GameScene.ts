@@ -129,10 +129,6 @@ export class GameScene extends Phaser.Scene {
     this.checkOutcome(result.outcome);
   }
 
-  get isGrabMode(): boolean {
-    return this.controls.isGrabMode;
-  }
-
   private updateMusic(): void {
     const { session } = this.state;
     const sim = session.simulation;

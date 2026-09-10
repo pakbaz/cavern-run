@@ -1,7 +1,7 @@
 import type Phaser from 'phaser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Dir } from '../engine/tiles';
-import { ControlEvent, InputManager } from './InputManager';
+import { InputManager } from './InputManager';
 
 vi.mock('phaser', () => ({
   default: {
@@ -66,29 +66,7 @@ function pointer(id: number, x = 100, y = 100, touch = true, right = false) {
 }
 
 describe('InputManager integration', () => {
-  it('buffers a quick dock tap exactly once with grab mode', () => {
-    const { manager, events } = harness();
-    events.emit(ControlEvent.Grab);
-    events.emit(ControlEvent.Direction, 'button-1', Dir.Right);
-    events.emit(ControlEvent.Release, 'button-1');
-    expect(manager.sample()).toEqual({ dir: Dir.Right, grab: true });
-    manager.consumeTick();
-    expect(manager.sample()).toEqual({ dir: null, grab: true });
-  });
-
-  it('switches grab mode without cancelling a physically held dock arrow', () => {
-    const { manager, events } = harness();
-    events.emit(ControlEvent.Direction, 'button-1', Dir.Right);
-    manager.consumeTick();
-    events.emit(ControlEvent.Grab);
-    expect(manager.sample()).toEqual({ dir: Dir.Right, grab: true });
-    events.emit(ControlEvent.Grab);
-    expect(manager.sample()).toEqual({ dir: Dir.Right, grab: false });
-    events.emit(ControlEvent.Release, 'button-1');
-    expect(manager.sample().dir).toBeNull();
-  });
-
-  it('does not let dock touches steer the cave or confirm a menu', () => {
+  it('ignores touches outside the playfield', () => {
     const { manager, input } = harness();
     const finger = pointer(1, 50, 430);
     input.emit('down', finger);
@@ -120,6 +98,21 @@ describe('InputManager integration', () => {
     expect(manager.sample().dir).toBe(Dir.Right);
     manager.consumeTick();
     expect(manager.sample().dir).toBeNull();
+  });
+
+  it('keeps a completed two-finger grab shorter than one simulation scan', () => {
+    const { manager, input } = harness();
+    const anchor = pointer(1);
+    const finger = pointer(2);
+    input.emit('down', anchor);
+    input.emit('down', finger);
+    finger.x += 50;
+    input.emit('move', finger);
+    input.emit('up', anchor);
+    input.emit('up', finger);
+    expect(manager.sample()).toEqual({ dir: Dir.Right, grab: true });
+    manager.consumeTick();
+    expect(manager.sample()).toEqual({ dir: null, grab: false });
   });
 
   it('steers toward the mouse and supports right-button grab', () => {
@@ -206,10 +199,9 @@ describe('InputManager integration', () => {
   });
 
   it('clears movement and queued actions on pointer cancellation', () => {
-    const { manager, events, canvas, key } = harness();
+    const { manager, canvas, key } = harness();
     key('ArrowRight');
-    events.emit(ControlEvent.Pause);
-    events.emit(ControlEvent.Direction, 'button-1', Dir.Down);
+    key('Escape');
     canvas.dispatchEvent(new Event('pointercancel'));
     expect(manager.sample().dir).toBeNull();
     expect(manager.consumePause()).toBe(false);
@@ -220,7 +212,6 @@ describe('InputManager integration', () => {
     events.emit('shutdown');
     manager.destroy();
     expect(events.count('destroy')).toBe(0);
-    expect(events.count(ControlEvent.Direction)).toBe(0);
     expect(input.count('down')).toBe(0);
     expect(keyboard.count('keydown')).toBe(0);
   });

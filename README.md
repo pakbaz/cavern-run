@@ -72,10 +72,10 @@ and retains only the ten highest scores in D1.
 
 | Action | Keyboard | Mouse | Touch | Gamepad |
 | --- | --- | --- | --- | --- |
-| Move / dig | Arrow keys or WASD | Hold toward a cell, or use the on-screen arrows | Swipe and hold, or use the on-screen arrows | D-pad or left stick |
-| Grab without moving | Shift or Ctrl + direction | Right-click toward a cell, or toggle GRAB | Toggle GRAB, or hold one finger and swipe another | A / X, shoulders or triggers |
+| Move / dig | Arrow keys or WASD | Hold toward a cell | Swipe and hold | D-pad or left stick |
+| Grab without moving | Shift or Ctrl + direction | Right-click toward a cell | Hold one finger and swipe another | A / X, shoulders or triggers |
 | Confirm | Enter or Space | Click the button | Tap the button | &mdash; |
-| Pause | Esc or P | Click II | Tap II | Start |
+| Pause | Esc or P | &mdash; | &mdash; | Start |
 | Restart cave | R | Pause, then Restart | Pause, then Restart | Select / Back |
 
 **Grab** scoops the dirt next to you without stepping into the gap. It is the
@@ -83,16 +83,16 @@ difference between clearing the ground under a boulder and being under it.
 
 On touch, keep one finger planted and swipe a second one to grab in that
 direction. Either finger can be the one that moves, so it works whichever
-hand you hold the phone in. The **GRAB** button is an alternative: tap once
-to switch on grab mode, then use a direction; tap again to walk normally.
-Its colour and label show when it is active. Lifting one finger from a
-two-finger grab stops movement until you make a new swipe.
+hand you hold the phone in. Lifting one finger from a two-finger grab stops
+movement until you make a new swipe. Short swipes are buffered so a quick
+gesture still registers between simulation scans.
 
-The pointer controls sit below the cave, never over a hazard or a diamond.
-A quick arrow tap makes one step, and holding repeats. Mouse steering is
-directional, not automatic pathfinding: you still choose the safe route.
-Pause offers pointer-accessible Resume, Restart and End Run buttons.
-Restarting costs a life.
+There are no on-screen movement controls. The cave uses all available space
+below the compact status bar. Mouse steering is directional, not automatic
+pathfinding: you still choose the safe route. Restarting costs a life.
+Use **FULL** at the right of the status bar for native fullscreen on supported
+mobile and desktop browsers; **BACK** leaves fullscreen. Browsers without
+native fullscreen still use the full available browser viewport.
 
 Each cave's introduction waits for Enter or a tap, giving you time to read
 the puzzle hint before starting. Switching tabs or leaving the game window
@@ -100,7 +100,9 @@ pauses the cave instead of letting it continue without you.
 
 The view adapts to the screen: a phone in portrait sees a tall, narrow slice
 of the cave, the same phone on its side sees a wide, short one, and a desktop
-sees more of both. Rotating mid-cave keeps the run going.
+sees more of both. The canvas matches the window's aspect ratio, including
+partial tiles at its edges, rather than leaving bars around a fixed grid.
+Rotating mid-cave keeps the run going.
 
 ## The rules
 
