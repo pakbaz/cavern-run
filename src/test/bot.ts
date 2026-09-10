@@ -22,7 +22,12 @@
  */
 
 import { CaveSession } from '../game/engine/CaveSession';
-import { CaveOutcome, type PlayerInput } from '../game/engine/simTypes';
+import {
+  CaveOutcome,
+  type PlayerInput,
+  type SimEvent,
+  type SimEventType,
+} from '../game/engine/simTypes';
 import {
   Dir,
   Tile,
@@ -332,6 +337,119 @@ function isLoadedDirt(sim: Sim, tile: TileId, x: number, y: number): boolean {
   return tile === Tile.Dirt && isLoaded(sim, x, y);
 }
 
+/** A horizontal grab direction for a loaded dirt cell beside this position. */
+function adjacentLoadedDirt(sim: Sim, x: number, y: number): Direction | null {
+  if (isLoadedDirt(sim, sim.cave.get(x - 1, y), x - 1, y)) return Dir.Left;
+  if (isLoadedDirt(sim, sim.cave.get(x + 1, y), x + 1, y)) return Dir.Right;
+  return null;
+}
+
+function adjacentCreatureDrop(sim: Sim, x: number, y: number): Direction | null {
+  if (!sim.runtime.amoebaResolved && sim.cave.countTile(Tile.Amoeba) > 0) return null;
+  const dir = adjacentLoadedDirt(sim, x, y);
+  if (dir === null) return null;
+  const dx = dir === Dir.Left ? -1 : 1;
+  return isCreature(sim.cave.get(x + dx, y + 1)) ? dir : null;
+}
+
+function isProductionSupport(sim: Sim, x: number, y: number): boolean {
+  if (!isLoadedDirt(sim, sim.cave.get(x, y), x, y)) return false;
+  for (let offset = 1; offset <= 4; offset += 1) {
+    const below = sim.cave.get(x, y + offset);
+    if (below === Tile.MagicWall || below === Tile.Slime) return true;
+    if (below !== Tile.Empty && below !== Tile.Dirt) return false;
+  }
+  return false;
+}
+
+function holdsUnresolvedAmoebaPlug(sim: Sim, x: number, y: number): boolean {
+  if (sim.runtime.amoebaResolved || !isLoadedDirt(sim, sim.cave.get(x, y), x, y)) return false;
+  return sim.cave.countTile(Tile.Amoeba) > 0;
+}
+
+function adjacentReleasableLoadedDirt(sim: Sim, x: number, y: number): Direction | null {
+  if (
+    isLoadedDirt(sim, sim.cave.get(x - 1, y), x - 1, y) &&
+    !holdsUnresolvedAmoebaPlug(sim, x - 1, y)
+  ) {
+    return Dir.Left;
+  }
+  if (
+    isLoadedDirt(sim, sim.cave.get(x + 1, y), x + 1, y) &&
+    !holdsUnresolvedAmoebaPlug(sim, x + 1, y)
+  ) {
+    return Dir.Right;
+  }
+  return null;
+}
+
+function adjacentProductionSupport(sim: Sim, x: number, y: number): Direction | null {
+  if (isProductionSupport(sim, x - 1, y)) return Dir.Left;
+  if (isProductionSupport(sim, x + 1, y)) return Dir.Right;
+  return null;
+}
+
+/**
+ * Reach the safe side of a loaded support, then pull it without stepping
+ * underneath the falling object. This is deliberately separate from ordinary
+ * pathing: the shortest route to a support is often straight up from below,
+ * which is exactly the unsafe side.
+ */
+function dropLoadedDirt(
+  sim: Sim,
+  danger: Uint8Array,
+  trail: Trail,
+): PlayerInput | null {
+  const immediate = adjacentReleasableLoadedDirt(
+    sim,
+    sim.runtime.playerX,
+    sim.runtime.playerY,
+  );
+  if (immediate !== null) return { dir: immediate, grab: true };
+
+  const stand = approach(
+    sim,
+    danger,
+    (tile, x, y) => isEnterable(tile) && adjacentReleasableLoadedDirt(sim, x, y) !== null,
+    trail,
+  );
+  return commit(sim, danger, stand, false);
+}
+
+function feedProductionLine(
+  sim: Sim,
+  danger: Uint8Array,
+  trail: Trail,
+): PlayerInput | null {
+  const immediate = adjacentProductionSupport(sim, sim.runtime.playerX, sim.runtime.playerY);
+  if (immediate !== null) return { dir: immediate, grab: true };
+
+  const stand = approach(
+    sim,
+    danger,
+    (tile, x, y) => isEnterable(tile) && adjacentProductionSupport(sim, x, y) !== null,
+    trail,
+  );
+  return commit(sim, danger, stand, false);
+}
+
+function triggerCreatureDrop(
+  sim: Sim,
+  danger: Uint8Array,
+  trail: Trail,
+): PlayerInput | null {
+  const immediate = adjacentCreatureDrop(sim, sim.runtime.playerX, sim.runtime.playerY);
+  if (immediate !== null) return { dir: immediate, grab: true };
+
+  const stand = approach(
+    sim,
+    danger,
+    (tile, x, y) => isEnterable(tile) && adjacentCreatureDrop(sim, x, y) !== null,
+    trail,
+  );
+  return commit(sim, danger, stand, false);
+}
+
 /**
  * Turn a step direction into an actual key press.
  *
@@ -378,9 +496,20 @@ function commit(
 
 
 /** Everything the miner might want, in the order it wants it. */
-function decide(sim: Sim, danger: Uint8Array, trail: Trail): PlayerInput {
+function decide(
+  sim: Sim,
+  danger: Uint8Array,
+  trail: Trail,
+  prioritizeCreatureDrops: boolean,
+): PlayerInput {
   const { width } = sim.cave;
   const here = danger[sim.runtime.playerX + sim.runtime.playerY * width];
+
+  // A trapped creature makes the safe side of its support look "near", but
+  // pulling that support is the intentional kill shot. Take it before the
+  // general threat-avoidance rule sends the miner retreating forever.
+  const armedDrop = adjacentCreatureDrop(sim, sim.runtime.playerX, sim.runtime.playerY);
+  if (armedDrop !== null) return { dir: armedDrop, grab: true };
 
   // Something is about to land on this cell, or a creature is closing on it:
   // getting clear beats everything else we might do this scan.
@@ -395,15 +524,37 @@ function decide(sim: Sim, danger: Uint8Array, trail: Trail): PlayerInput {
   }
 
   const takeDiamond: Goal = { wants: (tile) => isDiamond(tile), dropLoads: false };
-  const dropLoad: Goal = {
-    wants: (tile, x, y) => isLoadedDirt(sim, tile, x, y),
-    dropLoads: true,
+  const anyDirt: Goal = {
+    wants: (tile, x, y) => tile === Tile.Dirt && !holdsUnresolvedAmoebaPlug(sim, x, y),
+    dropLoads: false,
   };
-  const anyDirt: Goal = { wants: (tile) => tile === Tile.Dirt, dropLoads: false };
+
+  // A live amoeba with an open vent outranks every other production system.
+  // Its inaccessible bait diamond leads the solver through the movable plug.
+  if (!sim.runtime.amoebaResolved) {
+    const containment = commit(
+      sim,
+      danger,
+      approach(sim, danger, takeDiamond.wants, trail),
+      false,
+    );
+    if (containment !== null) return containment;
+  }
+
+  // Once a cave exposes a production rack, release it as a batch before
+  // chasing its output. This preserves short magic-wall charges and keeps
+  // slime cascades from degenerating into one-at-a-time busywork.
+  const production = feedProductionLine(sim, danger, trail);
+  if (production !== null) return production;
+
+  if (prioritizeCreatureDrops) {
+    const creatureDrop = triggerCreatureDrop(sim, danger, trail);
+    if (creatureDrop !== null) return creatureDrop;
+  }
 
   // Take what is lying about first; when nothing is reachable, go and make some
   // -- drop boulders through the slime, the magic wall or the nest below.
-  const goals: Goal[] = [takeDiamond, dropLoad, anyDirt];
+  const goals: Goal[] = [takeDiamond];
 
   if (sim.runtime.exitOpen) {
     goals.unshift({ wants: (tile: TileId) => tile === Tile.ExitOpen, dropLoads: false });
@@ -413,6 +564,12 @@ function decide(sim: Sim, danger: Uint8Array, trail: Trail): PlayerInput {
     const move = commit(sim, danger, approach(sim, danger, goal.wants, trail), goal.dropLoads);
     if (move !== null) return move;
   }
+
+  const dropped = dropLoadedDirt(sim, danger, trail);
+  if (dropped !== null) return dropped;
+
+  const dig = commit(sim, danger, approach(sim, danger, anyDirt.wants, trail), false);
+  if (dig !== null) return dig;
 
   return { dir: null, grab: false };
 }
@@ -427,6 +584,15 @@ export interface BotRun {
   readonly outcome: string;
   readonly diamonds: number;
   readonly ticks: number;
+  readonly secondsLeft: number;
+  readonly inputs: readonly PlayerInput[];
+  readonly events: readonly SimEvent[];
+  readonly eventCounts: Readonly<Record<SimEventType, number>>;
+  readonly eventTicks: Readonly<Partial<Record<SimEventType, readonly number[]>>>;
+  readonly butterflyExplosions: number;
+  readonly fireflyExplosions: number;
+  readonly amoebaDiamondResolutions: number;
+  readonly amoebaDiamondResolutionTick: number | null;
 }
 
 /**
@@ -437,6 +603,9 @@ export interface BotRun {
 export function playCave(run: CaveSession, maxTicks = 4000): BotRun {
   const sim = run.simulation;
   const trail = new Trail();
+  const hasAmoebaObjective = sim.cave.countTile(Tile.Amoeba) > 0;
+  const inputs: PlayerInput[] = [];
+  const eventTicks: Array<readonly [SimEvent, number]> = [];
   let ticks = 0;
 
   while (ticks < maxTicks && run.outcome === CaveOutcome.Running) {
@@ -444,16 +613,91 @@ export function playCave(run: CaveSession, maxTicks = 4000): BotRun {
 
     if (sim.runtime.playerBorn && sim.runtime.playerAlive) {
       trail.mark(sim.runtime.playerX + sim.runtime.playerY * sim.cave.width);
-      input = decide(sim, dangerMap(sim), trail);
+      input = decide(sim, dangerMap(sim), trail, hasAmoebaObjective);
     }
 
-    run.update(run.tickMs, input);
+    inputs.push(input);
+    const update = run.update(run.tickMs, input);
+    eventTicks.push(...update.events.map((event) => [event, ticks] as const));
     ticks += 1;
   }
 
+  return summarizeRun(run, ticks, inputs, eventTicks);
+}
+
+/** Replay an exact witness through the public session input path. */
+export function replayCave(run: CaveSession, inputs: readonly PlayerInput[]): BotRun {
+  const eventTicks: Array<readonly [SimEvent, number]> = [];
+  let ticks = 0;
+
+  for (const input of inputs) {
+    if (run.outcome !== CaveOutcome.Running) break;
+    const update = run.update(run.tickMs, input);
+    eventTicks.push(...update.events.map((event) => [event, ticks] as const));
+    ticks += 1;
+  }
+
+  return summarizeRun(run, ticks, inputs.slice(0, ticks), eventTicks);
+}
+
+function summarizeRun(
+  run: CaveSession,
+  ticks: number,
+  inputs: readonly PlayerInput[],
+  timedEvents: ReadonlyArray<readonly [SimEvent, number]>,
+): BotRun {
+  const eventCounts = Object.fromEntries(
+    [
+      'dig',
+      'push',
+      'land',
+      'diamond',
+      'explode',
+      'magicWallStart',
+      'magicWallConvert',
+      'magicWallStop',
+      'amoebaGrow',
+      'amoebaResolved',
+      'slime',
+      'expand',
+      'exitOpen',
+      'playerBorn',
+      'playerDied',
+      'caveComplete',
+    ].map((type) => [type, 0]),
+  ) as Record<SimEventType, number>;
+
+  let butterflyExplosions = 0;
+  let fireflyExplosions = 0;
+  let amoebaDiamondResolutions = 0;
+  let amoebaDiamondResolutionTick: number | null = null;
+  const eventTicks: Partial<Record<SimEventType, number[]>> = {};
+  for (const [event, tick] of timedEvents) {
+    eventCounts[event.type] += 1;
+    (eventTicks[event.type] ??= []).push(tick);
+    if (event.type === 'explode') {
+      if (event.intoDiamonds) butterflyExplosions += 1;
+      else fireflyExplosions += 1;
+    }
+    if (event.type === 'amoebaResolved' && event.into === Tile.Diamond) {
+      amoebaDiamondResolutions += 1;
+      amoebaDiamondResolutionTick ??= tick;
+    }
+  }
+
+  const sim = run.simulation;
   return {
     outcome: run.outcome,
     diamonds: sim.runtime.diamondsCollected,
     ticks,
+    secondsLeft: sim.secondsLeft,
+    inputs,
+    events: timedEvents.map(([event]) => event),
+    eventCounts,
+    eventTicks,
+    butterflyExplosions,
+    fireflyExplosions,
+    amoebaDiamondResolutions,
+    amoebaDiamondResolutionTick,
   };
 }

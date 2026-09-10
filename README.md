@@ -125,27 +125,29 @@ Rotating mid-cave keeps the run going.
 
 | | Cave | Gems | Time | | Cave | Gems | Time |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| A | First Descent | 14 | 140 | K | Expanding Ruin | 20 | 135 |
-| B | Rockfall | 16 | 135 | L | Growth Chamber | 24 | 150 |
-| C | The Gallery | 20 | 140 | M | Slime Pits | 26 | 140 |
-| D | Pushing Through | 20 | 135 | N | Double Trouble | 24 | 145 |
-| E | Firefly Warren | 18 | 135 | O | Amoeba Bloom | 28 | 150 |
-| F | Crush Depth | 20 | 130 | P | The Crucible | 28 | 145 |
-| G | Butterfly Vault | 22 | 145 | Q | Nest of Wings | 30 | 145 |
-| H | Magic Seam | 24 | 140 | R | Choke Point | 26 | 135 |
-| I | The Sieve | 24 | 135 | S | Cascade | 30 | 140 |
-| J | Green Tide | 22 | 150 | T | One Way Out | 32 | 165 |
+| A | Buried River | 10 | 80 | K | Closing Shift | 17 | 65 |
+| B | Rockfall | 12 | 55 | L | Bloom Chase | 10 | 85 |
+| C | Side Pocket | 11 | 70 | M | Membrane Drop | 21 | 55 |
+| D | Switchbacks | 12 | 85 | N | Crossed Wires | 26 | 48 |
+| E | Spark Lock | 10 | 60 | O | Twin Blooms | 28 | 80 |
+| F | Double Fuse | 14 | 95 | P | Alloy and Wings | 16 | 70 |
+| G | Rich Strike | 7 | 45 | Q | Three Charges | 20 | 65 |
+| H | Seven Furnaces | 9 | 80 | R | Blast Passage | 20 | 65 |
+| I | Relay Kilns | 13 | 80 | S | Cascade Works | 14 | 55 |
+| J | Seed Crystal | 18 | 70 | T | Foundry Run | 33 | 130 |
 
-Each cave introduces one idea and then asks you to combine it with the last
-one. The caves also speed up as you descend: the simulation runs at 7 scans a
-second in the first pair and 9 by the last.
+Five challenge tiers introduce individual mechanics before combining them.
+Simulation speed rises in small steps from 6.5 to 9.25 scans per second.
+Each cave has its own clock, with room to learn early puzzles and tighter
+time pressure later. Briefings show the objective, required mechanics, and
+challenge tier before the player starts the clock.
 
 The layouts are built from structural motifs rather than scattered contents:
-bricked vaults with a single door, boulder rafts resting on the gems you want,
-guard cells you have to open deliberately, hoppers feeding a magic wall,
-sealed amoeba pockets held shut by a plug, and corridors an expanding wall is
-closing behind you. Every layout, quota, clock and name is original to this
-project.
+bricked vaults opened by creature blasts, boulder gates, furnaces feeding a
+magic wall, slime cascades, live amoeba vents that the player must plug, and
+corridors made irreversible by expanding walls. Production caves contain too
+few loose diamonds to meet the quota: creating and releasing the rest is the
+puzzle. Every layout, quota, clock and name is original to this project.
 
 ## How it is built
 
@@ -209,20 +211,21 @@ exactly in both axes, so the backdrop tiles forever without a seam.
 
 ### The soundtrack
 
-Each cave has an original synthesized theme with its own mode, chords, motif,
-groove and instruments. Four-bar phrases vary their note lengths and accents,
-with rests and answering phrases instead of a continuous stream of notes.
-The themes gradually darken as the campaign descends.
+All twenty legacy melodies have been replaced by new original compositions.
+Each cave has its own motif, rhythm, chord progression and bass pulse, named
+for its stage and shaped around its puzzle. A shared three-note cadence and
+subterranean instrument palette keep the campaign musically connected.
 
 The arrangement develops with the clock and nearby danger. Intensity changes
-smoothly, and larger arrangement changes wait for a bar boundary. Early
-exploration leaves space between the melody, bass and pads; the final seconds
-bring stronger percussion and a countdown motif. Tempo ranges and layer gains
-are restrained so a passing creature does not make the whole score frantic.
+smoothly, and larger arrangement changes wait for a bar boundary. One clear
+foreground melody sits over quiet pads, bass and restrained percussion.
+There is no competing counter-melody, melodic echo, panic drone or countdown
+ticker. Tempo changes remain small so danger does not overwhelm the tune.
 
 Stereo placement, a synthetic cave reverb and a mix compressor give the sounds
-depth while keeping the melody and gameplay cues clear. Music changes
-crossfade; diamond collection, magic-wall conversion and opening the exit
+depth while keeping the melody and gameplay cues clear. Short, bounded
+crossfades prevent old tracks from stacking up. Diamond collection,
+magic-wall conversion and opening the exit
 have distinct cues. The soundtrack and effects use no third-party recordings.
 
 ### Saved data

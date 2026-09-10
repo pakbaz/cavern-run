@@ -13,11 +13,15 @@ describe('the campaign', () => {
 
   it('gives every cave a unique id and a real palette', () => {
     const ids = new Set(CAVES.map((cave) => cave.id));
+    const layouts = new Set(CAVES.map((cave) => cave.map.join('\n')));
     expect(ids.size).toBe(CAVES.length);
+    expect(layouts.size).toBe(CAVES.length);
     for (const cave of CAVES) {
       expect(PALETTES[cave.paletteId], `${cave.id} palette`).toBeDefined();
       expect(cave.name.length).toBeGreaterThan(0);
       expect(cave.hint.length).toBeGreaterThan(0);
+      expect(cave.objective.length).toBeGreaterThan(0);
+      expect(cave.mechanics.length).toBeGreaterThan(0);
     }
   });
 
@@ -57,6 +61,49 @@ describe('the campaign', () => {
     expect(avg(last.map((c) => c.diamondValue))).toBeGreaterThan(
       avg(first.map((c) => c.diamondValue)),
     );
+  });
+
+  it('raises simulation speed gradually without sudden difficulty spikes', () => {
+    for (let i = 1; i < CAVES.length; i += 1) {
+      const increase = CAVES[i].tickHz - CAVES[i - 1].tickHz;
+      expect(increase, `${CAVES[i - 1].letter} -> ${CAVES[i].letter}`).toBeGreaterThanOrEqual(0);
+      expect(increase, `${CAVES[i - 1].letter} -> ${CAVES[i].letter}`).toBeLessThanOrEqual(0.25);
+      expect(CAVES[i].difficulty, `${CAVES[i - 1].letter} -> ${CAVES[i].letter}`).toBeGreaterThanOrEqual(
+        CAVES[i - 1].difficulty,
+      );
+    }
+  });
+
+  it('backs every advertised special mechanic with authored cave tiles', () => {
+    const chars = {
+      gravity: ['r', 'd'],
+      'boulder-pushing': ['r'],
+      fireflies: ['f', 'F'],
+      butterflies: ['b', 'B'],
+      'magic-wall': ['M'],
+      amoeba: ['a'],
+      'expanding-wall': ['H', 'V', 'X'],
+      slime: ['S'],
+    } as const;
+
+    for (const cave of CAVES) {
+      const map = cave.map.join('');
+      for (const mechanic of cave.mechanics) {
+        if (mechanic === 'digging') continue;
+        expect(
+          chars[mechanic].some((char) => map.includes(char)),
+          `${cave.letter}: ${mechanic}`,
+        ).toBe(true);
+      }
+    }
+  });
+
+  it('makes required boulder-pushing gates deterministic across input methods', () => {
+    for (const cave of CAVES.filter((candidate) =>
+      candidate.mechanics.includes('boulder-pushing'),
+    )) {
+      expect(cave.pushChance, `${cave.letter}: push chance`).toBe(1);
+    }
   });
 
   it('introduces mechanics gradually', () => {

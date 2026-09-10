@@ -33,22 +33,32 @@ export class CaveIntroScene extends Phaser.Scene {
     const spec = session.spec;
 
     this.cameras.main.setBackgroundColor('#05070f');
-    card(this, 96, 380, 278);
+    card(this, 24, 380, 356);
 
-    centred(this, designY(138), `CAVE ${spec.letter}`, titleStyle(44));
-    centred(this, designY(176), spec.name.toUpperCase(), bodyStyle(15, Ink.accent));
+    centred(this, designY(64), `CAVE ${spec.letter}`, titleStyle(34));
+    centred(this, designY(100), spec.name.toUpperCase(), bodyStyle(15, Ink.accent));
 
-    centred(this, designY(214), `COLLECT ${spec.diamondsRequired} DIAMONDS`, bodyStyle(13));
-    centred(this, designY(234), `${spec.timeLimit} SECONDS`, bodyStyle(13));
-    centred(this, designY(256), `LIVES ${session.lives}`, bodyStyle(13, Ink.gold));
+    centred(this, designY(126), `CHALLENGE ${spec.difficulty}/5`, bodyStyle(10, Ink.gold));
+    centred(this, designY(152), `${spec.diamondsRequired} GEMS / ${spec.timeLimit}s / ${session.lives} LIVES`, bodyStyle(12));
 
-    centred(this, designY(288), spec.hint, {
+    const wrapWidth = Math.min(340, layout().width - 44);
+    centred(this, designY(198), spec.objective, {
       ...bodyStyle(12, Ink.bright),
-      wordWrap: { width: Math.min(340, layout().width - 44) },
+      wordWrap: { width: wrapWidth },
+      align: 'center',
+    });
+    centred(this, designY(248), spec.mechanics.map((mechanic) => mechanic.replaceAll('-', ' ').toUpperCase()).join(' / '), {
+      ...bodyStyle(9, Ink.accent),
+      wordWrap: { width: wrapWidth },
+      align: 'center',
+    });
+    centred(this, designY(296), spec.hint, {
+      ...bodyStyle(11, Ink.dim),
+      wordWrap: { width: wrapWidth },
       align: 'center',
     });
     centred(this, designY(350), 'ENTER / TAP TO DESCEND', bodyStyle(12, Ink.gold));
-    centred(this, layout().height - 40, `${session.caveIndex + 1} OF ${CAVE_COUNT}`, bodyStyle(11, Ink.dim));
+    centred(this, layout().height - 18, `${session.caveIndex + 1} OF ${CAVE_COUNT}`, bodyStyle(10, Ink.dim));
 
     this.input.keyboard?.on('keydown', this.onKey, this);
     this.input.once(Phaser.Input.Events.POINTER_DOWN, () => this.begin());
