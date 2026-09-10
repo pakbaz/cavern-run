@@ -16,6 +16,7 @@ interface Recording {
   nodes: number;
   disconnects: number;
   starts: number[];
+  delays: number;
 }
 
 function assertUsable(name: string, value: number, time: number): void {
@@ -78,7 +79,10 @@ function fakeContext(log: Recording) {
     createOscillator: node,
     createGain: node,
     createBiquadFilter: node,
-    createDelay: node,
+    createDelay() {
+      log.delays += 1;
+      return node();
+    },
     createBufferSource: node,
     createStereoPanner: node,
     createBuffer: (_channels: number, frames: number) => ({
@@ -95,8 +99,9 @@ function stubWindow(timeouts: Array<() => void> = []): void {
     clearInterval: () => {},
     setTimeout: (callback: () => void) => {
       timeouts.push(callback);
-      return 1;
+      return timeouts.length;
     },
+    clearTimeout: () => {},
   };
 }
 
@@ -107,7 +112,14 @@ afterEach(() => {
 describe('MusicDirector', () => {
   it('plays every cave from first movement to last without a bad value', () => {
     stubWindow();
-    const log: Recording = { freqs: [], gains: [], nodes: 0, disconnects: 0, starts: [] };
+    const log: Recording = {
+      freqs: [],
+      gains: [],
+      nodes: 0,
+      disconnects: 0,
+      starts: [],
+      delays: 0,
+    };
     const ctx = fakeContext(log);
     const engine = { ctx, musicBus: { connect() {}, disconnect() {} }, unlock() {} };
 
@@ -171,7 +183,14 @@ describe('MusicDirector', () => {
   it('crossfades a restarted cave instead of disconnecting the old score', () => {
     const timeouts: Array<() => void> = [];
     stubWindow(timeouts);
-    const log: Recording = { freqs: [], gains: [], nodes: 0, disconnects: 0, starts: [] };
+    const log: Recording = {
+      freqs: [],
+      gains: [],
+      nodes: 0,
+      disconnects: 0,
+      starts: [],
+      delays: 0,
+    };
     const ctx = fakeContext(log);
     const engine = { ctx, musicBus: { connect() {}, disconnect() {} }, unlock() {} };
     const director = new MusicDirector(engine as never);
@@ -186,9 +205,39 @@ describe('MusicDirector', () => {
     expect(log.disconnects).toBeGreaterThan(0);
   });
 
+  it('retires an older crossfade before starting a third score', () => {
+    const timeouts: Array<() => void> = [];
+    stubWindow(timeouts);
+    const log: Recording = {
+      freqs: [],
+      gains: [],
+      nodes: 0,
+      disconnects: 0,
+      starts: [],
+      delays: 0,
+    };
+    const ctx = fakeContext(log);
+    const engine = { ctx, musicBus: { connect() {}, disconnect() {} }, unlock() {} };
+    const director = new MusicDirector(engine as never);
+
+    director.start(0, 20);
+    director.start(1, 20);
+    expect(log.disconnects).toBe(0);
+
+    director.start(2, 20);
+    expect(log.disconnects).toBeGreaterThan(0);
+  });
+
   it('waits for a bar line before changing musical phase', () => {
     stubWindow();
-    const log: Recording = { freqs: [], gains: [], nodes: 0, disconnects: 0, starts: [] };
+    const log: Recording = {
+      freqs: [],
+      gains: [],
+      nodes: 0,
+      disconnects: 0,
+      starts: [],
+      delays: 0,
+    };
     const ctx = fakeContext(log);
     const engine = { ctx, musicBus: { connect() {}, disconnect() {} }, unlock() {} };
     const director = new MusicDirector(engine as never);
@@ -222,7 +271,14 @@ describe('MusicDirector', () => {
 
   it('renders a complete phrase with headroom and open sixteenth-note space', () => {
     stubWindow();
-    const log: Recording = { freqs: [], gains: [], nodes: 0, disconnects: 0, starts: [] };
+    const log: Recording = {
+      freqs: [],
+      gains: [],
+      nodes: 0,
+      disconnects: 0,
+      starts: [],
+      delays: 0,
+    };
     const ctx = fakeContext(log);
     const engine = { ctx, musicBus: { connect() {}, disconnect() {} }, unlock() {} };
     const director = new MusicDirector(engine as never);
@@ -245,7 +301,9 @@ describe('MusicDirector', () => {
     });
 
     expect(startsPerStep.filter((count) => count === 0).length).toBeGreaterThanOrEqual(16);
-    expect(Math.max(...startsPerStep)).toBeLessThanOrEqual(12);
+    expect(Math.max(...startsPerStep)).toBeLessThanOrEqual(8);
+    expect(log.starts.length).toBeLessThanOrEqual(96);
     expect(Math.max(...log.gains)).toBeLessThanOrEqual(0.5);
+    expect(log.delays).toBe(0);
   });
 });

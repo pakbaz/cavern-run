@@ -1,15 +1,12 @@
 import type { AudioEngine } from './AudioEngine';
 import {
   CAVE_CROSSFADE,
-  arpDegree,
-  arpPlays,
   bassDegree,
   chordDegree,
   drumsAt,
   filterCutoff,
   intensityOf,
   keyForCave,
-  keyShift,
   layerGains,
   leadAccent,
   leadDegree,
@@ -23,7 +20,6 @@ import {
   swingOffset,
   tempoFor,
   themeForCave,
-  tickerFreq,
   type CaveTheme,
   type IntensityInputs,
   type MusicKey,
@@ -43,8 +39,11 @@ interface VoiceOptions {
   readonly attack?: number;
   /** -1 hard left to 1 hard right. Absent or 0 leaves the voice centred. */
   readonly pan?: number;
-  /** Cents of pitch wobble, and how fast it wobbles. */
-  readonly vibrato?: { readonly cents: number; readonly rate: number };
+}
+
+interface RetiringScore {
+  readonly timeout: number;
+  readonly teardown: () => void;
 }
 
 /**
@@ -54,21 +53,20 @@ interface VoiceOptions {
  * the audio clock, which keeps the timing sample-accurate even when the main
  * thread is busy rendering. Everything about *what* it plays comes from
  * `musicMath`: each cave has its own theme -- key, tempo, groove, motif and
- * timbres -- and that theme is then developed as the clock runs down, from a
- * sparse pad-and-bass prowl through a driving middle to a panicked endgame with
- * a rising swell into every loop, a dissonant pedal and the tune dragged up a
- * semitone.
+ * timbres -- and that theme is then developed as the clock runs down, from
+ * a sparse pad-and-bass prowl into a gently firmer groove. The melody remains
+ * the only foreground line; adaptation changes weight and pulse without
+ * piling a second tune or alarm layer on top of it.
  */
 export class MusicDirector {
   private readonly engine: AudioEngine;
 
   private bus: GainNode | null = null;
   private filter: BiquadFilterNode | null = null;
-  private delay: DelayNode | null = null;
-  private delayFeedback: GainNode | null = null;
   private noise: AudioBuffer | null = null;
   private air: AudioBufferSourceNode | null = null;
   private airGain: GainNode | null = null;
+  private retiring: RetiringScore | null = null;
 
   private timer: number | null = null;
   private nextNoteTime = 0;
@@ -124,26 +122,7 @@ export class MusicDirector {
     this.bus.gain.setValueAtTime(0.0001, ctx.currentTime);
     this.bus.gain.exponentialRampToValueAtTime(1, ctx.currentTime + CAVE_CROSSFADE);
 
-    // A tempo-synced echo. Three sixteenths is long enough that the repeats
-    // land off the melody rather than smearing it, so the cave answers itself.
-    // The repeats are high-passed so they ring rather than build mud.
-    this.delay = ctx.createDelay(1.5);
-    this.delay.delayTime.value = 0.3;
-    this.delayFeedback = ctx.createGain();
-    this.delayFeedback.gain.value = 0.32;
-    const delayTone = ctx.createBiquadFilter();
-    delayTone.type = 'highpass';
-    delayTone.frequency.value = 420;
-    const delaySend = ctx.createGain();
-    delaySend.gain.value = 0.26;
-
     this.filter.connect(this.bus);
-    this.filter.connect(delaySend);
-    delaySend.connect(this.delay);
-    this.delay.connect(delayTone);
-    delayTone.connect(this.delayFeedback);
-    this.delayFeedback.connect(this.delay);
-    this.delay.connect(this.bus);
     this.bus.connect(musicBus);
 
     this.startAir();
@@ -194,15 +173,14 @@ export class MusicDirector {
       this.timer = null;
     }
     this.running = false;
+    this.disposeRetiring();
 
     const ctx = this.engine.ctx;
     const bus = this.bus;
-    const nodes = [this.filter, this.delay, this.delayFeedback, this.airGain];
+    const nodes = [this.filter, this.airGain];
     const air = this.air;
     this.bus = null;
     this.filter = null;
-    this.delay = null;
-    this.delayFeedback = null;
     this.air = null;
     this.airGain = null;
     if (!ctx || !bus) return;
@@ -227,7 +205,24 @@ export class MusicDirector {
     bus.gain.cancelScheduledValues(ctx.currentTime);
     bus.gain.setValueAtTime(Math.max(0.0001, bus.gain.value), ctx.currentTime);
     bus.gain.exponentialRampToValueAtTime(0.0001, end);
-    window.setTimeout(teardown, CAVE_CROSSFADE * 1000 + 120);
+    const retiring = {
+      timeout: 0,
+      teardown,
+    };
+    retiring.timeout = window.setTimeout(() => {
+      if (this.retiring !== retiring) return;
+      this.retiring = null;
+      teardown();
+    }, CAVE_CROSSFADE * 1000 + 120);
+    this.retiring = retiring;
+  }
+
+  private disposeRetiring(): void {
+    if (!this.retiring) return;
+    const retiring = this.retiring;
+    this.retiring = null;
+    window.clearTimeout(retiring.timeout);
+    retiring.teardown();
   }
 
   /** Feed the current state of the cave in; called every frame. */
@@ -262,7 +257,6 @@ export class MusicDirector {
     );
 
     const spb = stepDuration(tempoFor(this.intensity, this.theme));
-    this.delay?.delayTime.setTargetAtTime(spb * 3, ctx.currentTime, 0.25);
 
     while (this.nextNoteTime < ctx.currentTime + MusicDirector.LOOKAHEAD) {
       const time = this.nextNoteTime + swingOffset(this.step, this.theme, spb);
@@ -274,9 +268,8 @@ export class MusicDirector {
 
   private playStep(step: number, time: number, spb: number): void {
     const theme = this.theme;
-    // Harmonic and orchestration changes wait for a bar line. This turns
-    // rapidly changing threat readings into musical transitions rather than
-    // instruments flickering on and off halfway through a phrase.
+    // Phase bookkeeping waits for a bar line, keeping any adaptive changes
+    // aligned to the phrase rather than reacting halfway through a bar.
     if (step % 16 === 0) this.phase = this.targetPhase;
     const phase = this.phase;
     const gains = layerGains(this.intensity, this.secondsLeft, phase);
@@ -284,25 +277,25 @@ export class MusicDirector {
     const loop = loopSteps(theme);
     const position = ((step % loop) + loop) % loop;
 
-    if (gains.bass > 0 && beat % 2 === 0) {
+    if (gains.bass > 0 && beat % 4 === 0) {
       const degree = bassDegree(step, theme, phase);
       this.voice({
         freq: this.freqOf(degree - 7),
         time,
-        duration: spb * 0.85,
-        peak: gains.bass * 0.15,
+        duration: spb * 2.2,
+        peak: gains.bass * 0.12,
         type: theme.bassWave,
         release: 0.06,
       });
       // A sine an octave down, felt more than heard, on the bar's strong
       // beats. Square and sawtooth waves are thin this low, and the pitch is
       // floored so a deep cave never drops the sub below hearing.
-      if (beat % 4 === 0 && theme.subMix > 0) {
+      if (beat === 0 && theme.subMix > 0) {
         this.voice({
           freq: Math.max(34, this.freqOf(degree - 14)),
           time,
-          duration: spb * (phase >= 2 ? 1.8 : 1.2),
-          peak: gains.bass * 0.13 * theme.subMix * (phase >= 2 ? 1 : 0.7),
+          duration: spb * 3,
+          peak: gains.bass * 0.075 * theme.subMix,
           type: 'sine',
           release: 0.12,
           attack: 0.02,
@@ -312,16 +305,14 @@ export class MusicDirector {
 
     if (gains.pad > 0 && beat === 0) {
       const chord = chordDegree(step, theme, phase);
-      // The seventh only joins for the back half, which sours the harmony
-      // exactly when the cave starts to feel like it is closing in.
-      const intervals = phase >= 2 ? [0, 2, 4, 6] : [0, 2, 4];
+      const intervals = [0, 2, 4];
       for (let index = 0; index < intervals.length; index += 1) {
         const interval = intervals[index];
         this.voice({
           freq: this.freqOf(chord + interval),
           time,
           duration: spb * 15,
-          peak: gains.pad * 0.038,
+          peak: gains.pad * 0.032,
           type: theme.padWave,
           release: 0.9,
           detune: index % 2 === 0 ? -5 : 5,
@@ -334,7 +325,7 @@ export class MusicDirector {
         freq: this.freqOf(chord + 7),
         time,
         duration: spb * 15,
-        peak: gains.pad * 0.022,
+        peak: gains.pad * 0.016,
         type: 'sine',
         release: 1.2,
         attack: 0.5,
@@ -348,32 +339,19 @@ export class MusicDirector {
         freq: this.freqOf(degree),
         time,
         duration: spb * leadLength(step, theme),
-        peak: gains.lead * 0.082 * accent,
+        peak: gains.lead * 0.072 * accent,
         type: theme.leadWave,
         release: 0.18,
         detune: step % 32 < 16 ? -3 : 3,
         attack: 0.025,
         pan: step % 32 < 16 ? -0.16 : 0.16,
-        vibrato: { cents: 4 + phase * 2, rate: 4.2 + phase * 0.7 },
       });
-      // One bell answer at each phrase ending gives the melody a recognisable
-      // punctuation mark without coating every note in metallic transients.
-      if (theme.bellMix > 0 && beat === theme.rhythm[theme.rhythm.length - 1]) {
-        this.bell(this.freqOf(degree + 7), time, spb * 3.4, gains.lead * 0.045 * theme.bellMix);
+      // A single cadence shimmer once per whole loop punctuates the tune
+      // without becoming a second melodic line.
+      const cadence = loop - 16 + theme.rhythm[theme.rhythm.length - 1];
+      if (theme.bellMix > 0 && position === cadence) {
+        this.bell(this.freqOf(degree + 7), time, spb * 3.2, gains.lead * 0.032 * theme.bellMix);
       }
-    }
-
-    if (gains.arp > 0 && arpPlays(step, phase)) {
-      this.voice({
-        freq: this.freqOf(arpDegree(step, theme, phase)),
-        time,
-        duration: spb * 0.5,
-        peak: gains.arp * 0.05,
-        type: 'triangle',
-        release: 0.05,
-        // Opposite the lead, so the two lines stay legible against each other.
-        pan: step % 4 < 2 ? -0.42 : 0.42,
-      });
     }
 
     if (gains.drums > 0) {
@@ -382,34 +360,11 @@ export class MusicDirector {
       if (hit.snare) this.snare(time, gains.drums * (hit.fill ? 0.6 : 0.8));
       if (hit.hat && gains.hats > 0) this.hat(time, gains.hats);
     }
-
-    // A one-bar swell marks the turnaround without filling half the phrase
-    // with an ever-present alarm.
-    if (gains.riser > 0 && position === loop - 16) {
-      this.riser(time, spb * 16, gains.riser);
-    }
-
-    if (position === 0) {
-      if (gains.riser > 0) this.impact(time, gains.riser);
-      if (gains.drone > 0) this.drone(time, spb * loop, gains.drone);
-    }
-
-    // The countdown: one blip per beat, climbing in pitch.
-    if (gains.ticker > 0 && beat % 4 === 0) {
-      this.voice({
-        freq: tickerFreq(this.secondsLeft),
-        time,
-        duration: 0.07,
-        peak: 0.09 * gains.ticker,
-        type: 'square',
-        release: 0.01,
-      });
-    }
   }
 
-  /** Frequency of a scale degree in the current key, including any late lift. */
+  /** Frequency of a scale degree in the current cave key. */
   private freqOf(degree: number): number {
-    return midiToFreq(scaleNote(this.key, degree) + keyShift(this.phase));
+    return midiToFreq(scaleNote(this.key, degree));
   }
 
   /* ---------------------------------------------------------------- *
@@ -443,17 +398,12 @@ export class MusicDirector {
       gain.connect(this.filter);
     }
 
-    // The wobble rides the oscillator's detune, so it stacks with whatever
-    // chorus detune the caller already asked for.
-    const wobble = options.vibrato ? this.vibrato(options.vibrato, osc, time, end) : null;
-
     osc.start(time);
     osc.stop(end + 0.05);
     osc.onended = () => {
       osc.disconnect();
       gain.disconnect();
       pan?.disconnect();
-      wobble?.disconnect();
     };
   }
 
@@ -468,37 +418,6 @@ export class MusicDirector {
     const node = ctx.createStereoPanner();
     node.pan.value = pan < -1 ? -1 : pan > 1 ? 1 : pan;
     return node;
-  }
-
-  /**
-   * A low-frequency oscillator driving an oscillator's detune. Both the rate
-   * and the depth are set directly rather than scheduled: they are control
-   * values, not notes, and have no business in the audible ramps.
-   */
-  private vibrato(
-    settings: { readonly cents: number; readonly rate: number },
-    target: OscillatorNode,
-    time: number,
-    end: number,
-  ): OscillatorNode | null {
-    const ctx = this.engine.ctx;
-    if (!ctx) return null;
-
-    const lfo = ctx.createOscillator();
-    const depth = ctx.createGain();
-    lfo.type = 'sine';
-    lfo.frequency.value = settings.rate;
-    depth.gain.value = settings.cents;
-
-    lfo.connect(depth);
-    depth.connect(target.detune);
-    lfo.start(time);
-    lfo.stop(end + 0.05);
-    lfo.onended = () => {
-      lfo.disconnect();
-      depth.disconnect();
-    };
-    return lfo;
   }
 
   /**
@@ -629,90 +548,6 @@ export class MusicDirector {
   private hat(time: number, level: number): void {
     const length = this.theme.kit === 'hard' ? 0.032 : this.theme.kit === 'tight' ? 0.042 : 0.058;
     this.noiseBurst(time, length, level * 0.1, 'highpass', 6500, 0.55);
-  }
-
-  /** The crash that lands on the downbeat a riser has been climbing toward. */
-  private impact(time: number, level: number): void {
-    this.noiseBurst(time, 0.7, level * 0.12, 'highpass', 2600);
-  }
-
-  /**
-   * A swell into the next loop: noise climbing through a bandpass while a
-   * detuned pair of saws slides up underneath it. Nothing says "you are running
-   * out of time" quite so bluntly.
-   */
-  private riser(time: number, duration: number, level: number): void {
-    const ctx = this.engine.ctx;
-    if (!ctx || !this.filter || level <= 0) return;
-
-    const source = this.noiseSource(Math.min(duration, MusicDirector.NOISE_SECONDS));
-    if (!source) return;
-
-    const band = ctx.createBiquadFilter();
-    band.type = 'bandpass';
-    band.Q.value = 3.5;
-    band.frequency.setValueAtTime(240, time);
-    band.frequency.exponentialRampToValueAtTime(4200, time + duration);
-
-    const gain = ctx.createGain();
-    gain.gain.setValueAtTime(0.0001, time);
-    gain.gain.exponentialRampToValueAtTime(level * 0.07, time + duration);
-    gain.gain.exponentialRampToValueAtTime(0.0001, time + duration + 0.25);
-
-    source.connect(band);
-    band.connect(gain);
-    gain.connect(this.filter);
-    source.start(time, 0, Math.min(duration, MusicDirector.NOISE_SECONDS));
-    source.onended = () => {
-      source.disconnect();
-      band.disconnect();
-      gain.disconnect();
-    };
-
-    const base = this.freqOf(0) / 2;
-    for (const detune of [-9, 9]) {
-      const osc = ctx.createOscillator();
-      const oscGain = ctx.createGain();
-      osc.type = 'sawtooth';
-      osc.detune.setValueAtTime(detune, time);
-      osc.frequency.setValueAtTime(base, time);
-      osc.frequency.exponentialRampToValueAtTime(base * 2, time + duration);
-
-      oscGain.gain.setValueAtTime(0.0001, time);
-      oscGain.gain.exponentialRampToValueAtTime(level * 0.045, time + duration);
-      oscGain.gain.exponentialRampToValueAtTime(0.0001, time + duration + 0.2);
-
-      osc.connect(oscGain);
-      oscGain.connect(this.filter);
-      osc.start(time);
-      osc.stop(time + duration + 0.3);
-      osc.onended = () => {
-        osc.disconnect();
-        oscGain.disconnect();
-      };
-    }
-  }
-
-  /**
-   * The endgame pedal: the tonic with a tritone leaning on it, held under the
-   * whole loop. It never resolves, which is the point.
-   */
-  private drone(time: number, duration: number, level: number): void {
-    for (const [degree, weight] of [
-      [-7, 1],
-      [-4, 0.55],
-    ] as const) {
-      this.voice({
-        freq: this.freqOf(degree),
-        time,
-        duration,
-        peak: level * 0.05 * weight,
-        type: 'sawtooth',
-        release: 0.6,
-        detune: degree === -4 ? 12 : -12,
-        attack: 0.6,
-      });
-    }
   }
 
   private noiseBurst(

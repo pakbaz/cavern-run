@@ -12,10 +12,9 @@ import { themeForCave, type CaveTheme } from './caveThemes';
  *
  * Two things shape a cave's music. Its `CaveTheme` (see `caveThemes.ts`) fixes
  * the tune -- mode, progression, motif, groove, timbres -- so every cave is a
- * different piece. The *phase*, driven by how much of the clock has been spent,
- * then develops that piece: layers arrive, the melody thickens, the final bar
- * stops resolving, and the whole thing is winched up a semitone for the last
- * few seconds.
+ * different piece. Time and nearby danger gently adjust tempo, tone and rhythm
+ * weight, while the harmony and foreground melody remain stable enough to
+ * listen to over a full cave.
  */
 
 /* ------------------------------------------------------------------ *
@@ -111,8 +110,7 @@ export function musicPhase(secondsLeft: number, timeLimit: number): Phase {
 
 /**
  * Pure time pressure, 0..1. Curved so the first third of a cave stays calm and
- * the last third climbs steeply -- the dread should arrive gradually and then
- * all at once.
+ * urgency arrives gradually rather than dominating the whole run.
  */
 export function tensionOf(secondsLeft: number, timeLimit: number): number {
   let tension = Math.pow(timeSpentOf(secondsLeft, timeLimit), 1.4);
@@ -121,12 +119,9 @@ export function tensionOf(secondsLeft: number, timeLimit: number): number {
   return clamp(tension, 0, 1);
 }
 
-/**
- * Semitones the whole key is lifted by. Winching the tune up for the endgame
- * is a cheap trick and it works every time.
- */
-export function keyShift(phase: Phase): number {
-  return phase >= 3 ? 1 : 0;
+/** Compatibility hook for key movement; the relaxed score stays in one key. */
+export function keyShift(_phase: Phase): number {
+  return 0;
 }
 
 /* ------------------------------------------------------------------ *
@@ -173,8 +168,8 @@ export function intensityOf(inputs: IntensityInputs): number {
   let intensity = 0.12 * difficulty + 0.44 * tension + 0.1 * quotaLeft + 0.28 * threat;
 
   // The clock overrides everything else once it gets short.
-  if (inputs.secondsLeft <= TIME_PRESSURE_SECONDS) intensity = Math.max(intensity, 0.62);
-  if (inputs.secondsLeft <= TIME_CRITICAL_SECONDS) intensity = Math.max(intensity, 0.85);
+  if (inputs.secondsLeft <= TIME_PRESSURE_SECONDS) intensity = Math.max(intensity, 0.5);
+  if (inputs.secondsLeft <= TIME_CRITICAL_SECONDS) intensity = Math.max(intensity, 0.68);
 
   return clamp(intensity, 0, 1);
 }
@@ -206,31 +201,31 @@ export interface LayerGains {
   readonly pad: number;
   readonly bass: number;
   readonly lead: number;
-  /** Sixteenth-note counter-line that answers the melody. */
+  /** Reserved counter-line gain; zero in the single-melody arrangement. */
   readonly arp: number;
   readonly drums: number;
-  /** Driving sixteenth-note hats, for the back half of a cave. */
+  /** Sparse hat accents in the back half of a cave. */
   readonly hats: number;
-  /** Swell into each loop once the cave is running out of time. */
+  /** Reserved transition layer; zero in the relaxed arrangement. */
   readonly riser: number;
-  /** Dissonant pedal underneath the endgame. */
+  /** Reserved tension layer; zero in the relaxed arrangement. */
   readonly drone: number;
-  /** The countdown motif, only in the last few seconds. */
+  /** Reserved countdown layer; zero so it cannot interrupt the melody. */
   readonly ticker: number;
 }
 
-export function layerGains(intensity: number, secondsLeft: number, phase: Phase): LayerGains {
+export function layerGains(intensity: number, _secondsLeft: number, _phase: Phase): LayerGains {
   const i = clamp(intensity, 0, 1);
   return {
-    pad: (0.38 + clamp(1 - i, 0, 1) * 0.62) * 0.52,
-    bass: 0.46 + i * 0.27,
-    lead: ramp(i, 0.06, 0.3) * (0.42 + i * 0.25),
-    arp: phase >= 1 ? ramp(i, 0.3, 0.66) * (0.2 + phase * 0.05) : 0,
-    drums: ramp(i, 0.28, 0.58) * (0.34 + i * 0.36),
-    hats: ramp(i, 0.54, 0.78) * 0.3,
-    riser: phase >= 3 ? 0.38 : phase >= 2 ? 0.22 : 0,
-    drone: phase >= 3 ? 0.38 : phase >= 2 ? 0.1 : 0,
-    ticker: secondsLeft <= TIME_CRITICAL_SECONDS ? 0.68 : 0,
+    pad: 0.44 - i * 0.08,
+    bass: 0.36 + i * 0.1,
+    lead: ramp(i, 0.05, 0.28) * (0.38 + i * 0.14),
+    arp: 0,
+    drums: ramp(i, 0.42, 0.78) * (0.18 + i * 0.14),
+    hats: ramp(i, 0.62, 0.88) * 0.1,
+    riser: 0,
+    drone: 0,
+    ticker: 0,
   };
 }
 
@@ -263,19 +258,9 @@ function beatOf(step: number): number {
   return ((step % STEPS_PER_BAR) + STEPS_PER_BAR) % STEPS_PER_BAR;
 }
 
-/**
- * The chord under a step. Late in a cave the last bar of the loop is swapped
- * for something that refuses to resolve, so the tune keeps asking a question
- * it never answers.
- */
-export function chordDegree(step: number, theme: CaveTheme, phase: Phase): number {
-  const bars = theme.progression.length;
+/** The authored chord under a step; pressure never replaces the progression. */
+export function chordDegree(step: number, theme: CaveTheme, _phase: Phase): number {
   const bar = barOf(step, theme);
-
-  if (bar === bars - 1) {
-    if (phase >= 3) return theme.tensionChords[1];
-    if (phase >= 2) return theme.tensionChords[0];
-  }
   return theme.progression[bar];
 }
 
@@ -284,8 +269,6 @@ export function bassDegree(step: number, theme: CaveTheme, phase: Phase): number
   const root = chordDegree(step, theme, phase);
   const shape = theme.bassShape;
   const eighth = Math.floor(step / 2);
-  // In the endgame the bass abandons its arpeggio and hammers the root.
-  if (phase >= 3 && eighth % 2 === 1) return root;
   return root + shape[((eighth % shape.length) + shape.length) % shape.length];
 }
 
@@ -298,7 +281,10 @@ function motifSlot(theme: CaveTheme, beat: number): number {
   return slot < 0 ? 0 : slot;
 }
 
-function melodicContour(theme: CaveTheme, bar: number, beat: number, slot: number, phase: Phase): number {
+/** Shared three-note cave cadence that closes every otherwise unique phrase. */
+export const CAVE_LEITMOTIF: readonly number[] = [2, -1, 0];
+
+function melodicContour(theme: CaveTheme, bar: number, slot: number): number {
   const cell = theme.motif;
   const base = cell[slot % cell.length];
   const centre = cell[0];
@@ -318,15 +304,16 @@ function melodicContour(theme: CaveTheme, bar: number, beat: number, slot: numbe
       contour = centre - (base - centre) + 1;
       break;
     default:
-      // Answer the phrase and return its final note to the chord.
+      // Every cave answers with the same short descending turn. It is the
+      // campaign's shared subterranean signature around each unique melody.
+      const cadenceStart = Math.max(0, theme.rhythm.length - CAVE_LEITMOTIF.length);
       contour =
-        slot === theme.rhythm.length - 1
-          ? 0
-          : base + (slot % 2 === 0 ? 1 : 0) + (phase >= 2 && beat >= 8 ? 1 : 0);
+        slot >= cadenceStart
+          ? CAVE_LEITMOTIF[slot - cadenceStart]
+          : base + (slot % 2 === 0 ? 1 : 0);
       break;
   }
 
-  if (phase >= 3) contour += 1;
   return clamp(contour, -2, 5);
 }
 
@@ -340,21 +327,18 @@ function melodicContour(theme: CaveTheme, bar: number, beat: number, slot: numbe
  * plays the same one.
  */
 export function leadDegree(step: number, theme: CaveTheme, phase: Phase): number {
-  const bars = theme.progression.length;
   const bar = barOf(step, theme);
 
   const beat = beatOf(step);
   const slot = motifSlot(theme, beat);
-  const contour = melodicContour(theme, bar, beat, slot, phase);
+  const contour = melodicContour(theme, bar, slot);
 
-  // A slightly lower register makes the lead feel more singable and less harsh.
-  const lift = phase >= 3 ? 5 : phase >= 2 && bar === bars - 1 ? 4 : 0;
-  return chordDegree(step, theme, phase) + 10 + contour + lift;
+  return chordDegree(step, theme, phase) + 10 + contour;
 }
 
 /**
- * Does the lead sound on this step at all? Sparse and call-and-response at low
- * intensity, filled in with passing notes when the cave is frantic.
+ * Does the lead sound on this step at all? It remains call-and-response at
+ * every intensity, adding only a few notes while preserving the third-bar rest.
  */
 export function leadPlays(step: number, intensity: number, theme: CaveTheme): boolean {
   const bar = barOf(step, theme);
@@ -370,15 +354,12 @@ export function leadPlays(step: number, intensity: number, theme: CaveTheme): bo
     if (intensity < 0.32) {
       return bar !== 2 && (slot === 0 || slot === theme.rhythm.length - 1);
     }
-    if (intensity < 0.68) {
+    if (intensity < 0.75) {
       return bar !== 2 || slot === 0 || slot === theme.rhythm.length - 1;
     }
-    return true;
+    return bar !== 2 || slot % 2 === 0 || slot === theme.rhythm.length - 1;
   }
-
-  // One passing note per bar is enough even in panic; the counter-line and
-  // drums already carry the extra motion.
-  return intensity >= 0.88 && beat === 8 && bar !== 2;
+  return false;
 }
 
 /** Dynamic shape for a melody note: phrase openings and endings read clearly. */
@@ -397,20 +378,16 @@ export function leadLength(step: number, theme: CaveTheme): number {
   return slot === theme.rhythm.length - 1 ? 2.8 : slot === 0 ? 1.9 : 1.35;
 }
 
-/** The counter-line that runs under the melody once a cave gets going. */
+/** Retained pitch helper for compatibility with existing theme data. */
 export function arpDegree(step: number, theme: CaveTheme, phase: Phase): number {
   const shape = theme.arpShape;
   const index = ((step % shape.length) + shape.length) % shape.length;
   return chordDegree(step, theme, phase) + 7 + shape[index];
 }
 
-/** The counter-line thickens with every phase, from a hint to a torrent. */
-export function arpPlays(step: number, phase: Phase): boolean {
-  const beat = beatOf(step);
-  if (phase <= 0) return false;
-  if (phase === 1) return beat === 6 || beat === 14;
-  if (phase === 2) return beat % 4 === 2;
-  return beat % 2 === 1;
+/** The single-melody arrangement never schedules the former counter-line. */
+export function arpPlays(_step: number, _phase: Phase): boolean {
+  return false;
 }
 
 export interface DrumHit {
@@ -421,22 +398,14 @@ export interface DrumHit {
   readonly fill: boolean;
 }
 
-export function drumsAt(step: number, intensity: number, theme: CaveTheme, phase: Phase): DrumHit {
-  const bars = theme.progression.length;
-  const bar = barOf(step, theme);
+export function drumsAt(step: number, intensity: number, theme: CaveTheme, _phase: Phase): DrumHit {
   const beat = beatOf(step);
 
-  const busy = intensity > 0.65;
-  const fill =
-    phase >= 2 &&
-    bar === bars - 1 &&
-    (phase >= 3 ? beat === 12 || beat >= 14 : beat === 14);
-
   return {
-    kick: theme.kicks.includes(beat) || (busy && !fill && beat === 14),
-    snare: theme.snares.includes(beat) || fill,
-    hat: busy ? beat % 2 === 0 : beat % 4 === 2,
-    fill,
+    kick: theme.kicks.includes(beat),
+    snare: theme.snares.includes(beat),
+    hat: intensity >= 0.62 && (beat === 6 || beat === 14),
+    fill: false,
   };
 }
 
@@ -449,12 +418,12 @@ export function tickerFreq(secondsLeft: number): number {
   return 660 + t * 660;
 }
 
-/** Filter cutoff in Hz; brighter as the cave gets more frantic. */
-export function filterCutoff(intensity: number, phase: Phase): number {
-  return 380 + clamp(intensity, 0, 1) * 3400 + phase * 140;
+/** Filter cutoff in Hz; gently brighter as intensity rises. */
+export function filterCutoff(intensity: number, _phase: Phase): number {
+  return 520 + clamp(intensity, 0, 1) * 1800;
 }
 
 /** Seconds to crossfade when moving between caves. */
-export const CAVE_CROSSFADE = 0.9;
+export const CAVE_CROSSFADE = 0.35;
 
 export { THEMES, themeForCave, type CaveTheme } from './caveThemes';
