@@ -157,7 +157,6 @@ export class GameScene extends Phaser.Scene {
   private async completeCave(): Promise<void> {
     const { session } = this.state;
 
-    audio().sfx.caveComplete();
     audio().music.stop();
 
     const result = session.finishCave();
