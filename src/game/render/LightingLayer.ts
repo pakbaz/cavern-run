@@ -7,9 +7,6 @@ import { Tile } from '../engine/tiles';
 import { TextureKey } from './TextureFactory';
 import { clamp, glowTransform, lampCone, mixColor, smoothstep, visibleTiles } from './renderMath';
 
-/** Side length of the generated glow texture, in pixels. */
-const GLOW_TEXTURE_SIZE = 32;
-
 /** Radius of the miner's lamp, in cells, before the flicker is applied. */
 const LAMP_RADIUS = 4.2;
 
@@ -177,7 +174,7 @@ export class LightingLayer {
     // The light itself, laid over the hole it just cut. Warm, weak, and the
     // same shape as the cone, so lit rock looks lit rather than merely
     // un-darkened.
-    const { scale } = glowTransform(cone.radiusY, GLOW_TEXTURE_SIZE, TILE_SIZE);
+    const { scale } = glowTransform(cone.radiusY, this.lamp.width, TILE_SIZE);
     this.lamp
       .setPosition(cone.x, cone.y)
       .setScale(scale * (cone.radiusX / cone.radiusY), scale)
@@ -200,7 +197,7 @@ export class LightingLayer {
    * @param stretch how much wider than tall the light is.
    */
   private punch(x: number, y: number, radiusTiles: number, power = 1, stretch = 1): void {
-    const { scale, reach } = glowTransform(radiusTiles, GLOW_TEXTURE_SIZE, TILE_SIZE);
+    const { scale, reach } = glowTransform(radiusTiles, this.lamp.width, TILE_SIZE);
     const reachX = reach * stretch;
 
     // Cull by the light's own reach: a big lamp whose centre is just off the

@@ -193,7 +193,7 @@ export class TitleScene extends Phaser.Scene {
     const { width, height } = layout();
     for (let i = 0; i < this.motes.length; i += 1) {
       const mote = this.motes[i];
-      const fall = (this.clock * (0.008 + (i % 4) * 0.002)) % 1;
+      const fall = (seconds * (0.008 + (i % 4) * 0.002)) % 1;
       mote.setPosition(
         wrap(mote.getData('baseX') + drift(i * 0.7, this.clock, 30), width),
         wrap(mote.getData('baseY') - fall * height, height),

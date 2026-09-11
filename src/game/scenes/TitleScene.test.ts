@@ -94,6 +94,21 @@ function harness() {
 }
 
 describe('title controls', () => {
+  it('keeps background dust drifting rather than flashing across the screen', () => {
+    let y = 0;
+    const mote = {
+      getData: () => 100,
+      setPosition: (_x: number, nextY: number) => { y = nextY; },
+      setAlpha: vi.fn(),
+    };
+    const scene = new TitleScene();
+    Object.assign(scene, { state: { settings: { reducedMotion: false } }, motes: [mote] });
+    scene.update(0, 0);
+    const before = y;
+    scene.update(16, 16);
+    expect(Math.abs(y - before)).toBeLessThan(1);
+  });
+
   it('starts on the first deliberate tap, without consuming it to unlock sound', async () => {
     const h = harness();
     await h.scene.create();

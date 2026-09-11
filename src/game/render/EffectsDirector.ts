@@ -160,6 +160,7 @@ export class EffectsDirector {
     if (this.reducedMotion) return;
 
     this.moteClock += deltaMs;
+    const seconds = this.moteClock / 1000;
     const { width, worldHeight } = layout();
 
     for (let i = 0; i < this.motes.length; i += 1) {
@@ -168,7 +169,7 @@ export class EffectsDirector {
       // Spread across the view by index, then nudged by the drift, so the
       // spacing never collapses into a visible column.
       const baseX = ((i * 0.6180339887) % 1) * width;
-      const fall = (this.moteClock * (0.006 + (i % 5) * 0.0016)) % 1;
+      const fall = (seconds * (0.006 + (i % 5) * 0.0016)) % 1;
       const y = wrap(((i * 0.3819660113) % 1) + fall, 1) * worldHeight;
       mote.setPosition(
         wrap(baseX + drift(seed, this.moteClock, 26), width),
