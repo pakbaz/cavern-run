@@ -108,7 +108,7 @@ export class GameOverScene extends Phaser.Scene {
         centred(
           this,
           designY(254 + index * 16),
-          `${index + 1}. ${row.name.padEnd(4)} ${pad(row.score, 6)}  STAGE ${row.caveReached + 1}`,
+          `${index + 1}. ${row.name.padEnd(4)} ${pad(row.score, 6)}  STAGE ${row.caveReached}`,
           bodyStyle(11, Ink.body),
         );
       });

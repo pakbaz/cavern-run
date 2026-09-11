@@ -2,6 +2,7 @@
 export interface ScoreEntry {
   readonly name: string;
   readonly score: number;
+  /** One-based stage number from the score API, including intermissions. */
   readonly caveReached: number;
   readonly caveLetter: string;
   readonly date: string;

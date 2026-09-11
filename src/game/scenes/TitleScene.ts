@@ -670,7 +670,7 @@ export class TitleScene extends Phaser.Scene {
     divider(this, designX(-140), designY(top + 22), 280 * menuScale(), 0x8a6a24).setDepth(Depth.Menu);
 
     rows.forEach((row, index) => {
-      const line = `${index + 1}. ${row.name.padEnd(4)} ${pad(row.score, 6)}   STAGE ${row.caveReached + 1}`;
+      const line = `${index + 1}. ${row.name.padEnd(4)} ${pad(row.score, 6)}   STAGE ${row.caveReached}`;
       this.add
         .text(designX(-140), designY(top + 34 + index * 18), line, bodyStyle(12, Ink.body))
         .setOrigin(0, 0.5)
