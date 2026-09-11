@@ -11,9 +11,11 @@ function dismissBootSplash(): void {
 }
 
 function windowSize(): { w: number; h: number; dpr: number } {
+  const root = document.getElementById('game-root');
+  const bounds = root?.getBoundingClientRect();
   return {
-    w: window.innerWidth,
-    h: window.innerHeight,
+    w: Math.min(bounds?.width ?? window.innerWidth, window.visualViewport?.width ?? window.innerWidth),
+    h: Math.min(bounds?.height ?? window.innerHeight, window.visualViewport?.height ?? window.innerHeight),
     dpr: window.devicePixelRatio || 1,
   };
 }
@@ -61,10 +63,8 @@ game.events.once(Phaser.Core.Events.READY, dismissBootSplash);
 /**
  * Re-fit the canvas when the window changes shape.
  *
- * Rotating a phone or dragging a window across monitors changes how much cave
- * should be on screen. Only a change in the number of visible cells is worth
- * reacting to: resizing by a few pixels, or the address bar sliding away on
- * mobile, must not tear down and rebuild the scene mid-cave.
+ * Follow the available screen, including mobile browser chrome and native
+ * fullscreen. GameScene resizes in place, preserving the cave and its clock.
  */
 let resizeTimer = 0;
 function onWindowResize(): void {
@@ -82,6 +82,8 @@ function onWindowResize(): void {
 
 window.addEventListener('resize', onWindowResize);
 window.addEventListener('orientationchange', onWindowResize);
+window.visualViewport?.addEventListener('resize', onWindowResize);
+document.addEventListener('fullscreenchange', onWindowResize);
 
 // Belt and braces: never leave the splash stuck over a working canvas.
 window.setTimeout(dismissBootSplash, 6000);
@@ -96,4 +98,3 @@ document.addEventListener('visibilitychange', () => {
 });
 
 export default game;
-

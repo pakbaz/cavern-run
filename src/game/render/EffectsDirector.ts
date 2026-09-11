@@ -1,9 +1,14 @@
 import Phaser from 'phaser';
 
-import { Depth, TILE_SIZE } from '../../config';
+import { Depth, TILE_SIZE, type CavePalette } from '../../config';
+import { layout } from '../../layout';
 import { Tile } from '../engine/tiles';
 import type { SimEvent } from '../engine/simTypes';
 import { TextureKey } from './TextureFactory';
+import { drift, mixColor, wrap } from './renderMath';
+
+/** How many motes hang in the air of a cave. */
+const MOTE_COUNT = 22;
 
 /**
  * Turns simulation events into things you can see.
@@ -29,6 +34,11 @@ export class EffectsDirector {
   /** Ring sprites recycled for shockwaves, so a chain reaction allocates nothing. */
   private readonly rings: Phaser.GameObjects.Image[] = [];
   private flash: Phaser.GameObjects.Rectangle | null = null;
+
+  /** Dust hanging in the air of the cave, drifting on its own slow current. */
+  private readonly motes: Phaser.GameObjects.Image[] = [];
+  private readonly moteSeeds: number[] = [];
+  private moteClock = 0;
 
   private reducedMotion = false;
 
@@ -97,10 +107,78 @@ export class EffectsDirector {
         emitting: false,
       })
       .setDepth(Depth.Particles);
+
+    for (let i = 0; i < MOTE_COUNT; i += 1) {
+      this.moteSeeds.push((i * 2.399963) % (Math.PI * 2));
+      this.motes.push(
+        scene.add
+          .image(0, 0, TextureKey.mote)
+          .setScrollFactor(0)
+          .setBlendMode(Phaser.BlendModes.ADD)
+          .setDepth(Depth.Vignette - 1)
+          .setVisible(false),
+      );
+    }
   }
 
   setReducedMotion(reduced: boolean): void {
     this.reducedMotion = reduced;
+    if (reduced) for (const mote of this.motes) mote.setVisible(false);
+  }
+
+  /**
+   * Tie the effects to the cave's own colours.
+   *
+   * A dig in a sulphur cave should throw yellow grit and a dig in a rust cave
+   * red, or the particles read as belonging to some other game than the tiles
+   * they came out of.
+   */
+  setPalette(palette: CavePalette): void {
+    this.dust.setParticleTint([
+      palette.dirtLight,
+      palette.dirt,
+      mixColor(palette.dirtDark, palette.accent, 0.2),
+    ]);
+    this.debris.setParticleTint([
+      0xffe9a0,
+      mixColor(palette.accent, 0xff8a3a, 0.5),
+      palette.dirtLight,
+      palette.dirtDark,
+    ]);
+    for (const mote of this.motes) mote.setTint(mixColor(palette.fog, palette.accent, 0.55));
+  }
+
+  /**
+   * Ambient life, once per frame: dust drifting through the lamp light.
+   *
+   * The motes are pinned to the screen rather than the cave, and each one
+   * sinks at its own rate while wandering sideways, so the air keeps moving
+   * even when the miner is standing still working out where a boulder will
+   * fall. They are the first thing to go when reduced motion is on.
+   */
+  update(deltaMs: number): void {
+    if (this.reducedMotion) return;
+
+    this.moteClock += deltaMs;
+    const seconds = this.moteClock / 1000;
+    const { width, worldHeight } = layout();
+
+    for (let i = 0; i < this.motes.length; i += 1) {
+      const mote = this.motes[i];
+      const seed = this.moteSeeds[i];
+      // Spread across the view by index, then nudged by the drift, so the
+      // spacing never collapses into a visible column.
+      const baseX = ((i * 0.6180339887) % 1) * width;
+      const fall = (seconds * (0.006 + (i % 5) * 0.0016)) % 1;
+      const y = wrap(((i * 0.3819660113) % 1) + fall, 1) * worldHeight;
+      mote.setPosition(
+        wrap(baseX + drift(seed, this.moteClock, 26), width),
+        y + drift(seed * 1.7, this.moteClock, 8),
+      );
+      mote.setScale(0.4 + ((i % 4) * 0.18));
+      mote.setAlpha(0.08 + Math.abs(Math.sin(this.moteClock * 0.0004 + seed)) * 0.2);
+      mote.setVisible(true);
+    }
   }
 
   /** Fire the visuals for one scan's worth of events. */
@@ -189,6 +267,8 @@ export class EffectsDirector {
     this.smoke.destroy();
     for (const ring of this.rings) ring.destroy();
     this.rings.length = 0;
+    for (const mote of this.motes) mote.destroy();
+    this.motes.length = 0;
     this.flash?.destroy();
     this.flash = null;
   }

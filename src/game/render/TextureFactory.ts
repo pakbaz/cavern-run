@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 
 import { PALETTES, TILE_SIZE, type CavePalette } from '../../config';
-import { mixColor, shade, toCss } from './renderMath';
+import { EDGE_MASKS, EdgeBit, mixColor, shade, sheetCell, toCss, valueNoise } from './renderMath';
 
 /**
  * Every pixel of Cavern Run's artwork is generated at boot.
@@ -60,10 +60,39 @@ export const TextureKey = {
   glow: 'cr.glow',
   shard: 'cr.shard',
   smoke: 'cr.smoke',
+  mote: 'cr.mote',
   ring: 'cr.ring',
   shadow: 'cr.shadow',
   vignette: 'cr.vignette',
+
+  /**
+   * One sheet holding every carved-edge overlay, so a screenful of lit rock
+   * faces draws in a single batch. Frames are addressed by `edgeFrame` and
+   * `cavityFrame` below.
+   */
+  edges: 'cr.edges',
 } as const;
+
+/** How many chipped variants of each carved edge are baked. */
+export const EDGE_TERRAIN_VARIANTS = 2;
+
+function terrainFrameName(mask: number, variant: number): string {
+  return `t${variant}_${mask}`;
+}
+
+/** Frame of the edge sheet that bevels rock with `mask` sides dug open. */
+export function edgeFrame(mask: number, variant = 0): string {
+  const safeMask = ((Math.trunc(mask) % EDGE_MASKS) + EDGE_MASKS) % EDGE_MASKS;
+  const safeVariant =
+    ((Math.trunc(variant) % EDGE_TERRAIN_VARIANTS) + EDGE_TERRAIN_VARIANTS) % EDGE_TERRAIN_VARIANTS;
+  return terrainFrameName(safeMask, safeVariant);
+}
+
+/** Frame of the edge sheet that sinks an empty cell in behind `mask` walls. */
+export function cavityFrame(mask: number): string {
+  const safeMask = ((Math.trunc(mask) % EDGE_MASKS) + EDGE_MASKS) % EDGE_MASKS;
+  return `c${safeMask}`;
+}
 
 export const DIAMOND_FRAMES = 8;
 export const SLIME_FRAMES = 6;
@@ -75,7 +104,7 @@ export const BIRTH_FRAMES = 5;
 export const BOOM_FRAMES = 7;
 export const MAGIC_FRAMES = 6;
 export const EXIT_FRAMES = 6;
-export const DIRT_VARIANTS = 6;
+export const DIRT_VARIANTS = 8;
 
 /* ------------------------------------------------------------------ *
  * Painting
@@ -92,27 +121,13 @@ function seeded(seed: number): () => number {
   };
 }
 
-/**
- * Shading term for a point on a sphere of radius `r` offset from its centre by
- * (dx, dy). Returns the key contribution and the bounce separately so a caller
- * can tint them differently, which is the whole trick behind rock that looks
- * like it is sitting in a cave rather than floating on a page.
- */
-function sphereLight(dx: number, dy: number, r: number): { key: number; fill: number } {
-  const nx = dx / r;
-  const ny = dy / r;
-  const nz = Math.sqrt(Math.max(0, 1 - nx * nx - ny * ny));
-  return {
-    key: Math.max(0, nx * KEY_LIGHT.x + ny * KEY_LIGHT.y + nz * KEY_LIGHT.z),
-    fill: Math.max(0, nx * FILL_LIGHT.x + ny * FILL_LIGHT.y + nz * FILL_LIGHT.z),
-  };
-}
-
 /** A single sprite's canvas, addressed in logical pixels. */
 class Painter {
   readonly canvas: HTMLCanvasElement;
   readonly size: number;
   private readonly ctx: CanvasRenderingContext2D;
+  /** Which logical pixels are solid enough to count toward the silhouette. */
+  private readonly solid: Uint8Array;
 
   constructor(size = ART_SIZE) {
     this.size = size;
@@ -123,6 +138,7 @@ class Painter {
     if (!ctx) throw new Error('Cavern Run needs a 2D canvas context to generate its artwork');
     ctx.imageSmoothingEnabled = false;
     this.ctx = ctx;
+    this.solid = new Uint8Array(size * size);
   }
 
   px(x: number, y: number, color: number, alpha = 1): void {
@@ -131,6 +147,40 @@ class Painter {
     this.ctx.fillStyle = toCss(color);
     this.ctx.fillRect(x * SCALE, y * SCALE, SCALE, SCALE);
     this.ctx.globalAlpha = 1;
+    if (alpha >= 0.4) this.solid[Math.floor(y) * this.size + Math.floor(x)] = 1;
+  }
+
+  /**
+   * A dark contour on the transparent pixels touching the sprite.
+   *
+   * Every creature and the miner get one. A cave is a busy, low-contrast
+   * place, and a one-pixel contour is the difference between reading a shape
+   * at a glance and having to work out what just moved.
+   *
+   * Only transparent pixels are painted, so the artwork underneath is never
+   * eaten into: the silhouette grows outward instead.
+   */
+  contour(color = 0x05070d, alpha = 0.85, corners = true): void {
+    const hits: Array<[number, number]> = [];
+    for (let y = 0; y < this.size; y += 1) {
+      for (let x = 0; x < this.size; x += 1) {
+        if (this.solid[y * this.size + x]) continue;
+        const touching =
+          this.filled(x, y - 1) || this.filled(x, y + 1) || this.filled(x - 1, y) || this.filled(x + 1, y)
+          || (corners
+            && (this.filled(x - 1, y - 1) || this.filled(x + 1, y - 1)
+              || this.filled(x - 1, y + 1) || this.filled(x + 1, y + 1)));
+        if (touching) hits.push([x, y]);
+      }
+    }
+    // Collected first, then painted: growing the silhouette while walking it
+    // would let the contour spread across the whole sprite.
+    for (const [x, y] of hits) this.px(x, y, color, alpha);
+  }
+
+  private filled(x: number, y: number): boolean {
+    if (x < 0 || y < 0 || x >= this.size || y >= this.size) return false;
+    return this.solid[y * this.size + x] === 1;
   }
 
   fill(color: number, alpha = 1): void {
@@ -209,20 +259,209 @@ class Painter {
 }
 
 /* ------------------------------------------------------------------ *
+ * Carved edges
+ * ------------------------------------------------------------------ */
+
+/**
+ * The overlays that turn a grid of tiles into a dug-out cave.
+ *
+ * Rock is drawn as a mass: two neighbouring dirt tiles share no seam at all.
+ * Only the faces a player has actually opened get treated, and they are
+ * treated by which way they point under the game's one key light -- a bright
+ * lip along the top, a softer one down the left, a dark contact edge on the
+ * right, and the deepest shadow under an overhang.
+ *
+ * The matching cavity overlay sinks the empty cell itself into the rock, so a
+ * fresh tunnel reads as a hole with depth rather than as a black square.
+ */
+
+/** Light that lands on an exposed face, per side of the tile. */
+const FACE_LIGHT = 0xffeccd;
+const FACE_SHADOW = 0x02040a;
+
+/** Falloff of an edge treatment into the body of the tile. */
+function faceRamp(depth: number, reach: number, peak: number): number {
+  if (depth >= reach) return 0;
+  const t = 1 - depth / reach;
+  return peak * t * t;
+}
+
+function paintTerrainEdge(p: Painter, mask: number, variant: number): void {
+  const rand = seeded(0x3d6e + mask * 131 + variant * 977);
+  const last = p.size - 1;
+
+  const up = (mask & EdgeBit.Up) !== 0;
+  const right = (mask & EdgeBit.Right) !== 0;
+  const down = (mask & EdgeBit.Down) !== 0;
+  const left = (mask & EdgeBit.Left) !== 0;
+
+  if (up) {
+    // The lit lip of a floor, chipped along its length so a long shelf does
+    // not read as a ruled line.
+    for (let x = 0; x < p.size; x += 1) {
+      const chip = rand() > 0.78 ? 1 : 0;
+      for (let d = 0; d < 4; d += 1) {
+        p.px(x, d + chip, FACE_LIGHT, faceRamp(d, 4, 0.5));
+      }
+      if (chip) p.px(x, 0, FACE_SHADOW, 0.35);
+    }
+  }
+
+  if (left) {
+    for (let y = 0; y < p.size; y += 1) {
+      for (let d = 0; d < 3; d += 1) p.px(d, y, FACE_LIGHT, faceRamp(d, 3, 0.26));
+    }
+  }
+
+  if (right) {
+    for (let y = 0; y < p.size; y += 1) {
+      for (let d = 0; d < 4; d += 1) p.px(last - d, y, FACE_SHADOW, faceRamp(d, 4, 0.42));
+    }
+  }
+
+  if (down) {
+    // An overhang: the darkest edge in the game, and the reason a boulder
+    // hanging over a tunnel reads as a threat.
+    for (let x = 0; x < p.size; x += 1) {
+      const chip = rand() > 0.82 ? 1 : 0;
+      for (let d = 0; d < 5; d += 1) p.px(x, last - d - chip, FACE_SHADOW, faceRamp(d, 5, 0.55));
+    }
+  }
+
+  // Convex corners get knocked off, which is what stops a dug-out block from
+  // reading as a perfect square.
+  const bevel = (cx: number, cy: number, sx: number, sy: number, lit: boolean) => {
+    for (let i = 0; i < 3; i += 1) {
+      for (let j = 0; j < 3 - i; j += 1) {
+        p.px(cx + sx * i, cy + sy * j, lit ? FACE_LIGHT : FACE_SHADOW, 0.3 - (i + j) * 0.07);
+      }
+    }
+  };
+  if (up && left) bevel(0, 0, 1, 1, true);
+  if (up && right) bevel(last, 0, -1, 1, false);
+  if (down && left) bevel(0, last, 1, -1, false);
+  if (down && right) bevel(last, last, -1, -1, false);
+}
+
+function paintCavity(p: Painter, mask: number): void {
+  const last = p.size - 1;
+  const up = (mask & EdgeBit.Up) !== 0;
+  const right = (mask & EdgeBit.Right) !== 0;
+  const down = (mask & EdgeBit.Down) !== 0;
+  const left = (mask & EdgeBit.Left) !== 0;
+
+  // Ambient occlusion pressed in from every wall around the hole. The ceiling
+  // is darkest, the floor lightest: light that reaches the tunnel at all is
+  // coming down into it.
+  if (up) for (let x = 0; x < p.size; x += 1) {
+    for (let d = 0; d < 7; d += 1) p.px(x, d, FACE_SHADOW, faceRamp(d, 7, 0.62));
+  }
+  if (left) for (let y = 0; y < p.size; y += 1) {
+    for (let d = 0; d < 5; d += 1) p.px(d, y, FACE_SHADOW, faceRamp(d, 5, 0.34));
+  }
+  if (right) for (let y = 0; y < p.size; y += 1) {
+    for (let d = 0; d < 5; d += 1) p.px(last - d, y, FACE_SHADOW, faceRamp(d, 5, 0.38));
+  }
+  if (down) for (let x = 0; x < p.size; x += 1) {
+    for (let d = 0; d < 4; d += 1) p.px(x, last - d, FACE_SHADOW, faceRamp(d, 4, 0.2));
+  }
+}
+
+/**
+ * Bake every edge overlay into one sheet.
+ *
+ * Terrain masks occupy the first rows, cavity masks the rest. Sharing a
+ * texture means the hundreds of overlays on screen cost a single draw batch.
+ */
+function registerEdgeSheet(scene: Phaser.Scene): void {
+  if (scene.textures.exists(TextureKey.edges)) return;
+
+  const columns = 8;
+  const rows = (EDGE_MASKS / columns) * (1 + EDGE_TERRAIN_VARIANTS);
+  const cell = ART_SIZE * SCALE;
+  const sheet = document.createElement('canvas');
+  sheet.width = columns * cell;
+  sheet.height = rows * cell;
+  const ctx = sheet.getContext('2d');
+  if (!ctx) throw new Error('Cavern Run needs a 2D canvas context to generate its artwork');
+  ctx.imageSmoothingEnabled = false;
+
+  const frames: Array<{ name: string; col: number; row: number }> = [];
+  let slot = 0;
+  const place = (name: string, paint: (p: Painter) => void) => {
+    const { col, row } = sheetCell(slot, columns);
+    const painter = new Painter();
+    paint(painter);
+    ctx.drawImage(painter.canvas, col * cell, row * cell);
+    frames.push({ name, col, row });
+    slot += 1;
+  };
+
+  for (let variant = 0; variant < EDGE_TERRAIN_VARIANTS; variant += 1) {
+    for (let mask = 0; mask < EDGE_MASKS; mask += 1) {
+      place(terrainFrameName(mask, variant), (p) => paintTerrainEdge(p, mask, variant));
+    }
+  }
+  for (let mask = 0; mask < EDGE_MASKS; mask += 1) {
+    place(cavityFrame(mask), (p) => paintCavity(p, mask));
+  }
+
+  const texture = scene.textures.addCanvas(TextureKey.edges, sheet);
+  if (!texture) return;
+  for (const frame of frames) {
+    texture.add(frame.name, 0, frame.col * cell, frame.row * cell, cell, cell);
+  }
+}
+
+/* ------------------------------------------------------------------ *
  * Backdrop and parallax strata
  * ------------------------------------------------------------------ */
 
+/**
+ * The rock face behind the cave: what you are looking at down a tunnel you
+ * just dug.
+ *
+ * This one 32px sheet repeats across the whole cave, so everything in it is
+ * either noise or low-contrast detail. A recognisable feature here would tile
+ * into wallpaper the moment two cells of tunnel sat side by side.
+ */
 function paintBackdrop(p: Painter, palette: CavePalette): void {
   const rand = seeded(0xbeef);
-  p.fill(palette.background);
-  // Faint strata so the void behind the cave is not a flat colour. Kept very
-  // subtle now that two parallax layers sit behind it.
+  const deep = mixColor(palette.background, 0x000000, 0.25);
+  const damp = mixColor(palette.background, palette.fog, 0.45);
+
   for (let y = 0; y < p.size; y += 1) {
     for (let x = 0; x < p.size; x += 1) {
+      // Diagonal bedding planes: the rock behind was laid down in layers, and
+      // a tunnel cuts across them.
+      const bed = Math.sin((x * 0.6 + y * 1.35) * 0.55) * 0.5 + 0.5;
+      let color = mixColor(deep, damp, bed * 0.35);
       const n = rand();
-      if (n > 0.965) p.px(x, y, shade(palette.background, 0.14));
-      else if (n < 0.04) p.px(x, y, shade(palette.background, -0.35));
+      if (n > 0.955) color = shade(color, 0.22);
+      else if (n < 0.05) color = shade(color, -0.3);
+      p.px(x, y, color);
     }
+  }
+
+  // Chisel scars, left by whoever was down here first.
+  for (let i = 0; i < 5; i += 1) {
+    const x = Math.floor(rand() * p.size);
+    const y = Math.floor(rand() * p.size);
+    const len = 2 + Math.floor(rand() * 3);
+    for (let j = 0; j < len; j += 1) {
+      p.px((x + j) % p.size, (y + j) % p.size, shade(deep, -0.45), 0.6);
+      p.px((x + j) % p.size, (y + j + 1) % p.size, mixColor(damp, palette.accent, 0.12), 0.22);
+    }
+  }
+
+  // A handful of mineral glints, so the dark still has something in it.
+  for (let i = 0; i < 3; i += 1) {
+    p.px(
+      Math.floor(rand() * p.size),
+      Math.floor(rand() * p.size),
+      mixColor(palette.fog, palette.accent, 0.5),
+      0.3,
+    );
   }
 }
 
@@ -317,51 +556,90 @@ function paintStrataNear(p: Painter, palette: CavePalette): void {
  * Surfaces
  * ------------------------------------------------------------------ */
 
+/**
+ * Soil.
+ *
+ * The hard part of dirt is that there is a great deal of it on screen at once,
+ * every cell of it is the same 32 pixels repeated, and it has to stay quiet
+ * enough that a boulder, a gem or a miner standing on it is the thing your eye
+ * goes to. An earlier version was per-pixel noise over a flat brown, which
+ * from a distance read as television static and, worse, tiled into a visible
+ * lattice of identical flecks.
+ *
+ * So this is built as a material instead: broad clods of packed earth picked
+ * out by where they catch the light, a scatter of small stones with real tops
+ * and undersides, and only the occasional mineral glint. The contrast within
+ * a tile is deliberately narrow -- the interest comes from the shapes, not
+ * from the range -- and the renderer flips and tints each cell so no two
+ * neighbours are the same sheet.
+ */
 function paintDirt(p: Painter, palette: CavePalette, variant: number): void {
   const rand = seeded(0x1000 + variant * 977);
 
-  // Layered soil: bands of slightly different tone, so a wall of dirt has a
-  // grain to it instead of reading as one flat colour repeated. Low frequency
-  // and low amplitude — soil is a mass, not a stack of stripes.
+  // Value noise: a coarse lattice of random values, smoothly interpolated, so
+  // the soil breaks into clods a few pixels across rather than into confetti.
+  const grid = 4;
+  const cells = Math.ceil(p.size / grid) + 2;
+  const corners: number[] = [];
+  for (let i = 0; i < cells * cells; i += 1) corners.push(rand());
+  const clod = valueNoise(cells, grid, (index) => corners[index]);
+
+  const body = mixColor(palette.dirt, palette.dirtDark, 0.42);
+  const lit = mixColor(palette.dirtLight, palette.dirt, 0.5);
+
   for (let y = 0; y < p.size; y += 1) {
-    const band = Math.sin((y + variant * 5) * 0.38) * 0.5 + 0.5;
-    const row = mixColor(palette.dirt, band > 0.5 ? palette.dirtLight : palette.dirtDark, 0.1);
     for (let x = 0; x < p.size; x += 1) {
-      const grain = rand();
-      p.px(x, y, grain > 0.86 ? shade(row, 0.1) : grain < 0.12 ? shade(row, -0.12) : row);
+      const here = clod(x, y);
+      // Shade each clod by its own slope: where the surface falls away from
+      // the key light it darkens, which is what gives packed earth its tooth.
+      // The slope is kept gentle -- pushed hard it stops reading as soil and
+      // starts reading as wood grain.
+      const slope = clod(x - 1, y - 1) - here;
+      let color = mixColor(body, lit, Math.max(0, Math.min(1, here * 0.6 + slope * 1.05)));
+      if (slope < -0.16) color = mixColor(color, palette.dirtDark, 0.4);
+      // A whisper of grain over the top: enough tooth to look like earth at
+      // arm's length, far too little to read as noise.
+      const speck = rand();
+      if (speck > 0.9) color = shade(color, 0.05);
+      else if (speck < 0.1) color = shade(color, -0.06);
+      p.px(x, y, color);
     }
   }
 
-  // Pebbles: a lit cap, a body, and a shadow underneath. Three pixels each is
-  // enough to read as a stone once there are a dozen of them.
-  for (let i = 0; i < 6; i += 1) {
-    const x = 1 + Math.floor(rand() * (p.size - 3));
-    const y = 2 + Math.floor(rand() * (p.size - 5));
-    p.rect(x, y, 2, 2, palette.dirtDark);
-    p.px(x, y, mixColor(palette.dirtLight, 0xffffff, 0.25));
-    p.px(x + 1, y + 2, shade(palette.dirtDark, -0.35), 0.6);
+  // Stones caught in the soil: a lit cap over a dark body with a contact
+  // shadow, which is what tells the eye it is a solid thing in the earth
+  // rather than a smudge on it. Two per tile at most -- any more and a wall of
+  // dirt reads as gravel, and gravel competes with the boulders that matter.
+  const stone = mixColor(palette.dirt, palette.rock, 0.28);
+  for (let i = 0; i < 2; i += 1) {
+    const x = 2 + Math.floor(rand() * (p.size - 5));
+    const y = 2 + Math.floor(rand() * (p.size - 6));
+    const w = rand() > 0.6 ? 3 : 2;
+    p.rect(x, y, w, 2, shade(stone, -0.3));
+    for (let i2 = 0; i2 < w; i2 += 1) p.px(x + i2, y, mixColor(stone, 0xffffff, 0.16));
+    p.px(x, y, mixColor(stone, 0xffffff, 0.26));
+    for (let i2 = 0; i2 < w; i2 += 1) p.px(x + i2, y + 2, shade(palette.dirtDark, -0.4), 0.55);
   }
 
-  // Mineral flecks in the cave's accent colour: the hint that there is
-  // something worth digging for in here.
-  for (let i = 0; i < 3; i += 1) {
+  // One mineral glint per tile at most: the hint that there is something worth
+  // digging for down here, without turning the wall into a starfield.
+  if (variant % 2 === 0) {
     const x = 2 + Math.floor(rand() * (p.size - 4));
     const y = 2 + Math.floor(rand() * (p.size - 4));
-    p.px(x, y, mixColor(palette.dirtLight, palette.accent, 0.55), 0.8);
+    p.px(x, y, mixColor(palette.dirtLight, palette.accent, 0.6), 0.75);
+    p.px(x + 1, y + 1, mixColor(palette.dirtDark, palette.accent, 0.35), 0.35);
   }
 
-  // Just enough edge shaping to keep a dug face legible. Deliberately faint,
-  // and jittered per variant, so a screen full of soil does not turn into a
-  // hard lattice of tile borders.
-  const top = 0.1 + (variant % 3) * 0.05;
-  const bottom = 0.12 + ((variant + 1) % 3) * 0.05;
-  for (let x = 0; x < p.size; x += 1) {
-    p.px(x, 0, mixColor(palette.dirtLight, 0xffffff, 0.2), top);
-    p.px(x, p.size - 1, shade(palette.dirtDark, -0.3), bottom);
-  }
-  for (let y = 0; y < p.size; y += 1) {
-    p.px(0, y, palette.dirtLight, 0.08);
-    p.px(p.size - 1, y, palette.dirtDark, 0.14);
+  // A hairline crack, wandering. Undug soil is one continuous mass -- the tile
+  // borders live in the carved-edge overlays -- so this is what keeps a wall
+  // of it from reading as one flat sheet of colour.
+  let cx = Math.floor(rand() * p.size);
+  let cy = Math.floor(rand() * p.size);
+  for (let step = 0; step < 7; step += 1) {
+    p.px(cx, cy, shade(palette.dirtDark, -0.3), 0.45);
+    p.px(cx, cy + 1, mixColor(palette.dirtLight, palette.dirt, 0.5), 0.14);
+    cx = (cx + (rand() > 0.4 ? 1 : 0)) % p.size;
+    cy = (cy + (rand() > 0.65 ? 1 : 0)) % p.size;
   }
 }
 
@@ -474,62 +752,111 @@ function paintSteel(p: Painter, palette: CavePalette): void {
  * cave's accent colour tie it to the palette without tinting the whole rock.
  */
 function paintBoulder(p: Painter, palette: CavePalette): void {
-  const base = palette.rock;
-  const light = shade(base, 0.5);
-  const dark = shade(base, -0.52);
-  const rim = shade(base, -0.7);
-  const bounce = mixColor(shade(base, -0.2), palette.accent, 0.22);
+  // Boulders are cooler and lighter than the soil around them, because the
+  // single most common mistake a player can make is not noticing a rock
+  // sitting in the dirt above them. The cooling is deliberately slight: each
+  // cave's stone is one of the things that tells its palette apart, and a
+  // heavier hand turns every boulder in the game the same blue-grey.
+  const base = mixColor(palette.rock, 0x8fa2c4, 0.06);
+  const light = shade(base, 0.44);
+  const dark = shade(base, -0.6);
+  const rim = shade(base, -0.78);
+  const bounce = mixColor(shade(base, -0.15), palette.accent, 0.3);
   const rand = seeded(0xb0d1);
 
   const cx = 8;
   const cy = 8.2;
-  const r = 7.3;
+  const r = 7.4;
+
+  // The silhouette is a lumpy stone rather than a marble: three low harmonics
+  // knock the circle out of true, which is the difference between a boulder
+  // and a ball bearing.
+  const radiusAt = (angle: number): number =>
+    r * (1 + Math.sin(angle * 3 + 0.7) * 0.055 + Math.sin(angle * 5 - 1.9) * 0.04);
+
+  // Ten flat planes, not a sphere.
+  //
+  // Five wedges around the rock, split into an inner crown and an outer skirt
+  // and offset from each other so the joins do not all radiate from the
+  // centre like a pie chart. Each plane is lit once, by the direction it
+  // faces, and painted flat -- so the boundaries between planes become the
+  // chisel edges, and the rock reads as something broken off a wall rather
+  // than something inflated.
+  const SECTORS = 5;
+  const facetNormal = (angle: number, outer: boolean): { key: number; fill: number } => {
+    const turn = (angle + Math.PI) / (Math.PI * 2);
+    const sector = Math.floor(turn * SECTORS + (outer ? 0 : 0.5));
+    const centre = ((sector + 0.5) / SECTORS) * Math.PI * 2 - Math.PI;
+    // The skirt tilts away from the viewer; the crown is close to face-on.
+    const tilt = outer ? 0.86 : 0.42;
+    const nx = Math.cos(centre) * tilt;
+    const ny = Math.sin(centre) * tilt;
+    const nz = Math.sqrt(Math.max(0, 1 - nx * nx - ny * ny));
+    return {
+      key: Math.max(0, nx * KEY_LIGHT.x + ny * KEY_LIGHT.y + nz * KEY_LIGHT.z),
+      fill: Math.max(0, nx * FILL_LIGHT.x + ny * FILL_LIGHT.y + nz * FILL_LIGHT.z),
+    };
+  };
 
   for (let y = 0; y < p.size; y += 1) {
     for (let x = 0; x < p.size; x += 1) {
       const dx = x + 0.5 - cx;
       const dy = y + 0.5 - cy;
       const d = Math.sqrt(dx * dx + dy * dy);
-      if (d > r) continue;
+      const angle = Math.atan2(dy, dx);
+      const edge = radiusAt(angle);
+      if (d > edge) continue;
 
-      const { key, fill } = sphereLight(dx, dy, r);
-      let color = mixColor(dark, light, Math.pow(key, 0.72));
-      color = mixColor(color, bounce, Math.pow(fill, 2.4) * 0.55);
+      const outer = d > edge * 0.5;
+      const { key, fill } = facetNormal(angle, outer);
+      let color = mixColor(dark, light, Math.pow(key, 0.85));
+      color = mixColor(color, bounce, Math.pow(fill, 2.2) * 0.45);
 
       // Occlusion crescent where the rock meets whatever it rests on.
-      if (dy > r * 0.35) color = mixColor(color, rim, ((dy - r * 0.35) / (r * 0.65)) * 0.5);
-      // Dark contact edge.
-      if (d > r - 1.1) color = mixColor(color, rim, 0.7);
+      if (dy > r * 0.3) color = mixColor(color, rim, ((dy - r * 0.3) / (r * 0.7)) * 0.55);
+      // A hard dark rim, one pixel wide, all the way round.
+      if (d > edge - 1.15) color = mixColor(color, rim, 0.85);
+      // A dark seam where the crown meets the skirt.
+      else if (Math.abs(d - edge * 0.5) < 0.6) color = shade(color, -0.16);
 
-      if (rand() > 0.88) color = shade(color, rand() > 0.5 ? 0.09 : -0.11);
+      // Grain in the mid-tones only: noise in a highlight is what made the
+      // last version of this rock look out of focus.
+      if (rand() > 0.94) color = shade(color, -0.07);
       p.px(x, y, color);
     }
   }
 
-  // Cracks: two short strokes following the curve, plus their lit lower lip.
-  p.line(5, 10, 8, 12, shade(dark, -0.3), 0.7);
-  p.line(8, 12, 11, 11, shade(dark, -0.3), 0.55);
-  p.line(5, 11, 8, 13, shade(light, -0.1), 0.25);
-  p.line(10, 4, 12, 7, shade(dark, -0.25), 0.45);
+  // Cracks: two strokes following the curve, each with a lit lower lip so it
+  // reads as a split in the surface rather than a scratch on it.
+  p.line(5, 10, 8, 12, shade(dark, -0.45), 0.85);
+  p.line(8, 12, 11, 11, shade(dark, -0.45), 0.7);
+  p.line(5, 11, 8, 13, shade(light, -0.2), 0.35);
+  p.line(10, 4, 12, 7, shade(dark, -0.4), 0.6);
+  p.line(11, 4, 13, 7, shade(light, -0.25), 0.22);
 
-  // Mineral flecks.
-  for (let i = 0; i < 5; i += 1) {
+  // Mineral flecks, tying the rock to the cave it came out of.
+  for (let i = 0; i < 3; i += 1) {
     const a = rand() * Math.PI * 2;
-    const d = rand() * (r - 2);
+    const d = rand() * (r - 2.5);
     p.px(
       Math.round(cx + Math.cos(a) * d - 0.5),
       Math.round(cy + Math.sin(a) * d - 0.5),
       mixColor(light, palette.accent, 0.5),
-      0.7,
+      0.55,
     );
   }
 
-  // Specular: a hard core with a soft skirt, which is what sells "polished".
-  p.rect(5, 4, 2, 2, mixColor(light, 0xffffff, 0.65));
-  p.px(4, 5, mixColor(light, 0xffffff, 0.3), 0.8);
-  p.px(7, 4, mixColor(light, 0xffffff, 0.3), 0.7);
-  p.px(5, 6, mixColor(light, 0xffffff, 0.2), 0.6);
-  p.px(7, 3, mixColor(light, 0xffffff, 0.18), 0.5);
+  // Specular: a hard core with a tight skirt. Polished stone, and the thing
+  // that tells you at a glance which way the cave is lit.
+  p.rect(5, 4, 2, 2, mixColor(light, 0xffffff, 0.5));
+  p.px(4, 5, mixColor(light, 0xffffff, 0.3), 0.85);
+  p.px(7, 4, mixColor(light, 0xffffff, 0.3), 0.75);
+  p.px(5, 6, mixColor(light, 0xffffff, 0.2), 0.55);
+  p.px(7, 3, mixColor(light, 0xffffff, 0.16), 0.45);
+
+  // A contour on the transparent side of the edge, so the stone still has a
+  // silhouette when it is sitting on soil of a similar value.
+  p.contour(0x05070c, 0.55, false);
 }
 
 /* ------------------------------------------------------------------ *
@@ -631,41 +958,59 @@ function paintDiamond(p: Painter, frame: number): void {
       p.px(sx, sy - i, GEM_WHITE, a);
     }
   }
+
+  // A dark setting around the stone. Gems are the thing you are here for, and
+  // a contour is what makes one read as a cut object sitting in a hole rather
+  // than as a blue smudge on the dirt.
+  p.contour(0x061426, 0.8, false);
 }
 
+/**
+ * Slime: a sheet of cold, glassy ooze that heavy things sink through.
+ *
+ * Deliberately aqua rather than green. The amoeba is the green thing in this
+ * game, and a player who confuses the wall that lets boulders through with the
+ * blob that suffocates them is going to lose a life over it.
+ */
 function paintSlime(p: Painter, frame: number): void {
   const rand = seeded(0x51117e + frame * 31);
-  const deep = 0x0d3b23;
-  const base = 0x1d5f3a;
-  const bright = 0x63e39a;
+  const deep = 0x062a38;
+  const base = 0x0f5a70;
+  const bright = 0x4fd6e8;
   const wave = (x: number, y: number) =>
     Math.sin((x + frame * 1.4) * 0.62) * 0.5 + Math.cos((y - frame * 1.1) * 0.55) * 0.5;
 
   for (let y = 0; y < p.size; y += 1) {
     for (let x = 0; x < p.size; x += 1) {
       const n = wave(x, y);
-      p.px(x, y, mixColor(base, bright, 0.22 + n * 0.16));
+      // Vertical banding: the sheet is running, not sitting.
+      const run = Math.sin((y * 1.7 - frame * 2.2) * 0.4) * 0.12;
+      p.px(x, y, mixColor(base, bright, 0.18 + n * 0.14 + run));
     }
   }
 
   // Bubbles rising through the goo.
-  for (let i = 0; i < 8; i += 1) {
+  for (let i = 0; i < 7; i += 1) {
     const bx = 1 + Math.floor(rand() * (p.size - 3));
     const by = 1 + Math.floor(rand() * (p.size - 3));
-    p.ellipse(bx + 1, by + 1, 1.6, 1.3, mixColor(bright, 0xffffff, 0.25), 0.7);
-    p.px(bx, by, 0xc8ffe0, 0.85);
+    p.ellipse(bx + 1, by + 1, 1.7, 1.4, mixColor(bright, 0xffffff, 0.3), 0.6);
+    p.px(bx, by, 0xd8ffff, 0.8);
+    p.px(bx + 1, by + 2, deep, 0.35);
   }
 
   // A meniscus at the top and drips hanging off the bottom, so a slime ceiling
   // reads as something a boulder would sink through.
   for (let x = 0; x < p.size; x += 1) {
-    p.px(x, 0, deep, 0.75);
-    p.px(x, 1, mixColor(bright, 0xffffff, 0.4), 0.35);
+    p.px(x, 0, deep, 0.8);
+    p.px(x, 1, mixColor(bright, 0xffffff, 0.55), 0.45);
   }
   for (let i = 0; i < 4; i += 1) {
     const dx = (i * 4 + frame) % p.size;
-    const len = 1 + ((frame + i) % 3);
-    for (let j = 0; j < len; j += 1) p.px(dx, p.size - 1 - j, deep, 0.6);
+    const len = 2 + ((frame + i) % 4);
+    for (let j = 0; j < len; j += 1) {
+      p.px(dx, p.size - 1 - j, mixColor(deep, bright, 0.35 - j * 0.06), 0.8);
+      p.px(dx + 1, p.size - 1 - j, deep, 0.4);
+    }
   }
 }
 
@@ -724,6 +1069,10 @@ function paintAmoeba(p: Painter, frame: number): void {
     p.px(Math.round(cx), Math.round(cy), nucleus, 0.9);
     p.px(Math.round(cx) + 1, Math.round(cy), bright, 0.7);
   }
+
+  // A membrane around the whole colony, so its edge stays legible as it
+  // creeps into a tunnel.
+  p.contour(0x0a2508, 0.75);
 }
 
 /* ------------------------------------------------------------------ *
@@ -731,21 +1080,23 @@ function paintAmoeba(p: Painter, frame: number): void {
  * ------------------------------------------------------------------ */
 
 /**
- * A firefly: a burning core with four blades whirling round it and a pair of
- * eyes that never blink. Aggressive, hot, and unmistakably not a butterfly --
- * the two used to share a silhouette, which made a cave full of both a
- * guessing game at speed.
+ * A firefly: an ember-shelled thing with a molten core, four cutting blades
+ * whirling round it, and two eyes that never blink.
+ *
+ * Hot, angular and unmistakably not a butterfly -- the two used to share a
+ * silhouette, which made a cave full of both a guessing game at speed.
  */
 function paintFirefly(p: Painter, frame: number): void {
   const halo = 0x5a1204;
+  const shell = 0x3d0c05;
   const blade = 0xff7a2a;
   const bladeTip = 0xffd76a;
-  const core = 0xd8331f;
+  const core = 0xf2481f;
   const hot = 0xfff0b0;
   const angle = (frame / CREATURE_FRAMES) * (Math.PI / 2);
 
-  p.disc(8, 8, 7.2, halo, 0.35);
-  p.disc(8, 8, 5.6, shade(halo, 0.12), 0.4);
+  p.disc(8, 8, 7.2, halo, 0.3);
+  p.disc(8, 8, 5.6, shade(halo, 0.1), 0.36);
 
   for (let i = 0; i < 4; i += 1) {
     const a = angle + (i * Math.PI) / 2;
@@ -762,46 +1113,63 @@ function paintFirefly(p: Painter, frame: number): void {
     }
   }
 
-  p.disc(8, 8, 3.4, shade(core, -0.4));
-  p.disc(8, 8, 2.6, core);
-  p.disc(8, 8, 1.4, hot);
+  // A hard shell over a molten core, cracked open along two seams. The shell
+  // is what stops the creature reading as a bright asterisk.
+  p.disc(8, 8, 4.1, shell);
+  p.disc(8, 8, 3.4, shade(shell, 0.12));
+  for (let i = -3; i <= 3; i += 1) {
+    p.px(8 + i, 8 + Math.round(i * 0.4), mixColor(core, hot, 0.4), 0.85);
+    p.px(8 + Math.round(i * 0.35), 8 + i, core, 0.6);
+  }
+  p.disc(8, 8, 1.8, core);
+  p.disc(8, 8, 1, hot);
 
-  // Eyes.
-  p.px(6, 7, 0xffffff);
-  p.px(9, 7, 0xffffff);
-  p.px(6, 8, 0x2a0800, 0.8);
-  p.px(9, 8, 0x2a0800, 0.8);
+  // Eyes, set into the shell.
+  p.px(6, 6, hot);
+  p.px(10, 6, hot);
+  p.px(6, 7, 0x2a0800);
+  p.px(10, 7, 0x2a0800);
+
+  p.contour(0x1a0500, 0.5);
 }
 
 /**
- * A butterfly: pale wings that flap through the frame loop over a dark body.
- * Worth six diamonds when something heavy lands on it, and drawn to look it --
- * the wings carry a gem-blue sheen that echoes the diamond palette.
+ * A butterfly: four pale wings beating over a dark body, worth six diamonds
+ * when something heavy lands on it -- and drawn to look it, with a gem-blue
+ * sheen along every leading edge.
+ *
+ * The wings are two rounded pairs rather than one straight taper, which is
+ * what tells it apart from a firefly at a glance and across a dark cave.
  */
 function paintButterfly(p: Painter, frame: number): void {
-  const flap = [1, 0.86, 0.62, 0.45, 0.62, 0.86][frame % CREATURE_FRAMES];
-  const wing = 0xdfe9ff;
-  const wingDeep = 0x6f8fd8;
-  const edge = 0x3a4f8f;
+  const flap = [1, 0.88, 0.66, 0.48, 0.66, 0.88][frame % CREATURE_FRAMES];
+  const wing = 0xe6eeff;
+  const wingDeep = 0x7d9be0;
+  const edge = 0x36488a;
   const sheen = 0x9df0ff;
   const body = 0x1c2340;
 
-  p.disc(8, 8, 7, 0x1a2440, 0.22);
+  p.disc(8, 8, 7, 0x1a2440, 0.2);
 
-  for (let i = 0; i < 6; i += 1) {
-    const t = i / 5;
-    const half = Math.max(1, Math.round((1.8 + t * 5.2) * flap));
-    for (let dy = -half; dy <= half; dy += 1) {
-      const y = 8 + dy;
-      const rim = Math.abs(dy) >= half - 0.5;
-      const upper = dy < 0;
-      let color = mixColor(wing, wingDeep, t * 0.55 + (upper ? 0 : 0.18));
-      if (rim) color = edge;
-      // A vein of gem-blue along the leading edge of each wing.
-      else if (dy === -half + 1 || dy === half - 1) color = mixColor(color, sheen, 0.45);
-      p.px(6 - i, y, color, rim ? 0.9 : 1);
-      p.px(9 + i, y, shade(color, -0.08), rim ? 0.9 : 1);
+  for (const side of [-1, 1] as const) {
+    // Forewing: broad, swept up and back from the shoulders.
+    const foreX = 8 + side * (3.6 * flap + 0.4);
+    p.ellipse(foreX, 6.2, 3.5 * flap + 0.6, 3.1, mixColor(wing, wingDeep, 0.18));
+    p.ellipse(foreX + side * 0.4, 5.6, 2.4 * flap + 0.4, 2.1, wing);
+    // Hindwing: smaller, rounder, tucked under.
+    const hindX = 8 + side * (2.9 * flap + 0.4);
+    p.ellipse(hindX, 10.8, 2.7 * flap + 0.5, 2.4, mixColor(wing, wingDeep, 0.45));
+    p.ellipse(hindX, 10.4, 1.7 * flap + 0.3, 1.5, mixColor(wing, wingDeep, 0.2));
+
+    // Veins and the gem-blue leading edge.
+    for (let i = 0; i < 4; i += 1) {
+      const t = i / 3;
+      p.px(Math.round(8 + side * (1.5 + t * 4 * flap)), Math.round(4.2 + t * 1.4), sheen, 0.55);
+      p.px(Math.round(8 + side * (1.4 + t * 3 * flap)), Math.round(9.4 + t * 1.6), mixColor(wingDeep, edge, 0.5), 0.5);
     }
+    // Eye spots: the warning colour on a creature that is worth a lot dead.
+    p.px(Math.round(foreX + side * 0.8), 6, mixColor(sheen, 0xffffff, 0.4), 0.9);
+    p.px(Math.round(hindX), 11, mixColor(edge, sheen, 0.4), 0.8);
   }
 
   // Body: a segmented abdomen with a head and antennae.
@@ -816,6 +1184,10 @@ function paintButterfly(p: Painter, frame: number): void {
   p.px(9, 2, edge, 0.85);
   p.px(5, 1, sheen, 0.6);
   p.px(10, 1, sheen, 0.6);
+
+  // Pale wings over pale rock need a contour, or a butterfly disappears into
+  // the wall of a sulphur cave at exactly the moment it matters.
+  p.contour(0x10162c, 0.7);
 }
 
 /* ------------------------------------------------------------------ *
@@ -831,8 +1203,10 @@ const LAMP = 0xfff6c2;
 const SUIT = 0x2f6fd0;
 const SUIT_LIGHT = 0x5a9bf0;
 const SUIT_DARK = 0x1b4489;
-const BOOT = 0x2a2a33;
+const BOOT = 0x22222b;
+const BOOT_LIGHT = 0x4a4a58;
 const BELT = 0x8a5a2a;
+const BELT_LIGHT = 0xd8a252;
 const EYE = 0x1a1a22;
 
 const PLAYER_PALETTE: Readonly<Record<string, number>> = {
@@ -843,66 +1217,129 @@ const PLAYER_PALETTE: Readonly<Record<string, number>> = {
   s: SKIN,
   S: SKIN_DARK,
   E: EYE,
+  m: SKIN_DARK,
   b: SUIT_DARK,
   B: SUIT,
   C: SUIT_LIGHT,
   t: BELT,
+  T: BELT_LIGHT,
   k: BOOT,
+  K: BOOT_LIGHT,
 };
 
 /** Head and torso: identical in every pose. */
 const PLAYER_BODY: readonly string[] = [
-  '................',
-  '.....hhhhhh.....',
-  '....hHGGGGHh....',
-  '..LLHHHHHHHHh...',
-  '..LLhhhhhhhhh...',
-  '.....ssssss.....',
-  '.....sEssEs.....',
-  '.....SssssS.....',
-  '......SssS......',
-  '....bBCCCCBb....',
-  '...bBBCCBBBBb...',
-  '...sBBBBBBBBs...',
-  '...Sttttttttb...',
-  '...SbBBBBBBbS...',
+  '....hhhhhhhh....',
+  '...hHGGGGGGHh...',
+  '.LLHHHHHHHHHHh..',
+  '.LLhhhhhhhhhhh..',
+  '....ssssssss....',
+  '...sEEssssEEs...',
+  '...ssssmmsss....',
+  '....SssssssS....',
+  '...bBCCCCCCBb...',
+  '..bBBCCCCBBBBb..',
+  '..sBBBBBBBBBBs..',
+  '..STtttttttttb..',
+  '..SbBBBBBBBBbS..',
+  '...bBBBBBBBBb...',
 ];
 
+/** Row of `PLAYER_BODY` the eyes live on. */
+const PLAYER_EYE_ROW = 5;
+
 /** Blinking swaps the eye row for plain skin. */
-const PLAYER_EYES_SHUT = '.....ssssss.....';
+const PLAYER_EYES_SHUT = '...ssssssssss...';
 
 /** Leg poses, drawn beneath the body. Six of them make a run cycle. */
 const PLAYER_LEGS: readonly (readonly string[])[] = [
-  ['.....BB..BB.....', '....kkk..kkk....'],
-  ['....BB....BB....', '..kkk......kkk..'],
-  ['...BB......BB...', '.kkk........kkk.'],
-  ['....BB....BB....', '..kkk......kkk..'],
-  ['.....BB..BB.....', '...kkk....kkk...'],
-  ['......BBBB......', '.....kkkkkk.....'],
+  ['....BBB..BBB....', '...kKk...kKk....'],
+  ['...BBB....BBB...', '..kKk......kKk..'],
+  ['..BBB......BBB..', '.kKk........kKk.'],
+  ['...BBB....BBB...', '..kKk......kKk..'],
+  ['....BBB..BBB....', '..kKk.....kKk...'],
+  ['....BBBBBBBB....', '...kKkk..kkKk...'],
 ];
+
+/** How far the pick head swings forward, per frame of the run cycle. */
+const PICK_SWING: readonly number[] = [0, 1, 2, 2, 1, 0];
 
 /**
  * @param bob vertical offset of the torso only, in logical pixels. The boots
  * stay planted, so a breathing idle compresses the miner rather than sliding
  * the whole sprite down the cell.
+ * @param lean horizontal offset of the head and shoulders. A running miner
+ * leads with the helmet; standing still, they stand up straight.
+ * @param swing index into the pick's swing arc, or -1 to shoulder it.
  */
-function paintPlayer(p: Painter, legPose: number, blink: boolean, bob = 0): void {
+function paintPlayer(p: Painter, legPose: number, blink: boolean, bob = 0, lean = 0, swing = -1): void {
   const body = blink
-    ? PLAYER_BODY.map((row, i) => (i === 6 ? PLAYER_EYES_SHUT : row))
+    ? PLAYER_BODY.map((row, i) => (i === PLAYER_EYE_ROW ? PLAYER_EYES_SHUT : row))
     : PLAYER_BODY;
-  p.stamp(body, PLAYER_PALETTE, bob);
+
+  // The pick goes down first so the miner's hands read as being in front of
+  // the shaft rather than behind it.
+  paintPick(p, swing, bob);
+
+  // Head and shoulders lean; hips and boots stay where they were planted.
+  const upper = body.slice(0, 8).map((row) => shiftRow(row, lean));
+  p.stamp(upper, PLAYER_PALETTE, bob);
+  p.stamp(body.slice(8), PLAYER_PALETTE, bob + 8);
   p.stamp(PLAYER_LEGS[legPose % PLAYER_LEGS.length], PLAYER_PALETTE, PLAYER_BODY.length);
 
+  // A contour, so the miner reads against soil, brick and steel alike. Drawn
+  // before the lamp bloom, which is meant to spill past the silhouette.
+  p.contour(0x080a12, 0.8);
+
   // Lamp bloom, so the miner is always the brightest thing on screen.
-  p.px(1, 3, LAMP, 0.6);
-  p.px(1, 4, LAMP, 0.45);
-  p.px(0, 3, LAMP, 0.28);
-  p.px(2, 2, LAMP, 0.3);
-  p.px(1, 5, LAMP, 0.2);
+  const lampY = 2 + bob;
+  p.px(1 + lean, lampY, LAMP, 0.7);
+  p.px(1 + lean, lampY + 1, LAMP, 0.5);
+  p.px(0 + lean, lampY, LAMP, 0.34);
+  p.px(2 + lean, lampY - 1, LAMP, 0.34);
+  p.px(1 + lean, lampY + 2, LAMP, 0.22);
+  p.px(0, lampY + 1, mixColor(LAMP, 0xff9b4a, 0.4), 0.18);
 
   // Contact shadow under the boots.
   p.px(5, 15, 0x000000, 0.25);
   p.px(10, 15, 0x000000, 0.25);
+}
+
+/** The miner's pick: shouldered when idle, swung through the run cycle. */
+function paintPick(p: Painter, swing: number, bob: number): void {
+  const haft = 0x6b4426;
+  const haftLight = 0x9a6b3c;
+  const head = 0xb9c3d4;
+  const headLight = 0xe6eefc;
+
+  if (swing < 0) {
+    // Shouldered: the shaft rides on the shoulder with the head clear of the
+    // helmet, so it reads as a tool being carried rather than as a smudge
+    // behind the miner.
+    p.line(12, 14 + bob, 14, 6 + bob, haft);
+    p.line(13, 14 + bob, 15, 6 + bob, shade(haft, -0.35), 0.8);
+    p.px(14, 7 + bob, haftLight, 0.7);
+    for (let i = 0; i < 4; i += 1) p.px(12 + i, 5 + bob, head);
+    p.px(15, 4 + bob, headLight);
+    p.px(12, 6 + bob, shade(head, -0.45), 0.9);
+    p.px(13, 6 + bob, shade(head, -0.3), 0.6);
+    return;
+  }
+
+  const reach = PICK_SWING[swing % PICK_SWING.length];
+  const tipY = 6 + bob + reach * 2;
+  p.line(11, 11 + bob, 13 + reach, tipY, haft);
+  p.line(11, 12 + bob, 13 + reach, tipY + 1, shade(haft, -0.3), 0.7);
+  p.line(12 + reach, tipY - 1, 15, tipY + 1, head);
+  p.px(15, tipY + 1, headLight);
+  p.px(12 + reach, tipY, shade(head, -0.35), 0.85);
+}
+
+/** Shift a stamp row sideways, dropping whatever falls off the edge. */
+function shiftRow(row: string, offset: number): string {
+  if (offset === 0) return row;
+  const pad = '.'.repeat(Math.abs(offset));
+  return offset > 0 ? (pad + row).slice(0, row.length) : (row + pad).slice(-row.length);
 }
 
 /**
@@ -1170,6 +1607,8 @@ function register(scene: Phaser.Scene, key: string, paint: (p: Painter) => void,
  * already exist are left alone.
  */
 export function generateTextures(scene: Phaser.Scene): void {
+  registerEdgeSheet(scene);
+
   for (const palette of Object.values(PALETTES)) {
     register(scene, TextureKey.backdrop(palette.id), (p) => paintBackdrop(p, palette));
     register(scene, TextureKey.strataFar(palette.id), (p) => paintStrataFar(p, palette), STRATA_SIZE);
@@ -1202,13 +1641,17 @@ export function generateTextures(scene: Phaser.Scene): void {
     register(scene, TextureKey.butterfly(f), (p) => paintButterfly(p, f));
   }
   for (let f = 0; f < PLAYER_IDLE_FRAMES; f += 1) {
-    // A slow breath, and a blink two thirds of the way through the loop.
+    // A slow breath, a blink two thirds of the way through the loop, and the
+    // pick resting on a shoulder.
     register(scene, TextureKey.playerIdle(f), (p) =>
-      paintPlayer(p, 0, f === PLAYER_IDLE_FRAMES - 2, f >= 2 && f <= 4 ? 1 : 0),
+      paintPlayer(p, 0, f === PLAYER_IDLE_FRAMES - 2, f >= 2 && f <= 4 ? 1 : 0, 0, -1),
     );
   }
   for (let f = 0; f < PLAYER_RUN_FRAMES; f += 1) {
-    register(scene, TextureKey.playerRun(f), (p) => paintPlayer(p, f, false, f % 3 === 1 ? 1 : 0));
+    // Running leads with the helmet and swings the pick through its arc.
+    register(scene, TextureKey.playerRun(f), (p) =>
+      paintPlayer(p, f, false, f % 3 === 1 ? 1 : 0, f === 1 || f === 2 ? 1 : 0, f),
+    );
   }
   for (let f = 0; f < BIRTH_FRAMES; f += 1) register(scene, TextureKey.birth(f), (p) => paintBirth(p, f));
   for (let f = 0; f < BOOM_FRAMES; f += 1) register(scene, TextureKey.boom(f), (p) => paintBoom(p, f));
@@ -1221,6 +1664,7 @@ export function generateTextures(scene: Phaser.Scene): void {
 
   register(scene, TextureKey.spark, (p) => paintParticle(p, 0xffffff, 2.2, false), 8);
   register(scene, TextureKey.dust, (p) => paintParticle(p, 0xd8c9a8, 3, true), 8);
+  register(scene, TextureKey.mote, (p) => paintParticle(p, 0xffffff, 3.4, true), 8);
   register(scene, TextureKey.shard, (p) => paintParticle(p, 0x9df0ff, 2, false), 8);
   register(scene, TextureKey.smoke, (p) => paintParticle(p, 0x8a8a96, 7.5, true), 16);
   register(scene, TextureKey.glow, (p) => paintParticle(p, 0xffffff, 15, true), 32);

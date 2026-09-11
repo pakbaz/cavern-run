@@ -13,7 +13,8 @@ export class Sfx {
   private readonly engine: AudioEngine;
 
   /** Voices started during the current scan, to stop an avalanche clipping. */
-  private budget = 0;
+  private budget: number | null = null;
+  private noiseBuffer: AudioBuffer | null = null;
 
   constructor(engine: AudioEngine) {
     this.engine = engine;
@@ -29,57 +30,63 @@ export class Sfx {
     if (!this.engine.ready) return;
     this.beginFrame();
 
-    for (const event of events) {
-      switch (event.type) {
-        case 'dig':
-          this.dig();
-          break;
-        case 'push':
-          this.push();
-          break;
-        case 'land':
-          this.land(event.tile);
-          break;
-        case 'diamond':
-          this.diamond(event.collected);
-          break;
-        case 'explode':
-          this.explosion();
-          break;
-        case 'magicWallStart':
-        case 'magicWallConvert':
-          this.magicChime();
-          break;
-        case 'magicWallStop':
-          this.magicStop();
-          break;
-        case 'amoebaGrow':
-          this.amoeba();
-          break;
-        case 'amoebaResolved':
-          this.crystallise();
-          break;
-        case 'slime':
-          this.slime();
-          break;
-        case 'expand':
-          this.push();
-          break;
-        case 'exitOpen':
-          this.exitOpen();
-          break;
-        case 'playerBorn':
-          this.born();
-          break;
-        case 'playerDied':
-          this.died();
-          break;
-        case 'caveComplete':
-          this.caveComplete();
-          break;
-        default:
-          break;
+    try {
+      for (const event of events) {
+        switch (event.type) {
+          case 'dig':
+            this.dig();
+            break;
+          case 'push':
+            this.push();
+            break;
+          case 'land':
+            this.land(event.tile);
+            break;
+          case 'diamond':
+            this.diamond(event.collected);
+            break;
+          case 'explode':
+            this.explosion();
+            break;
+          case 'magicWallStart':
+          case 'magicWallConvert':
+            this.magicChime();
+            break;
+          case 'magicWallStop':
+            this.magicStop();
+            break;
+          case 'amoebaGrow':
+            this.amoeba();
+            break;
+          case 'amoebaResolved':
+            this.crystallise();
+            break;
+          case 'slime':
+            this.slime();
+            break;
+          case 'expand':
+            this.push();
+            break;
+          case 'exitOpen':
+            this.exitOpen();
+            break;
+          case 'playerBorn':
+            this.born();
+            break;
+          case 'playerDied':
+            this.died();
+            break;
+          case 'caveComplete':
+            this.caveComplete();
+            break;
+          default:
+            break;
+        }
       }
+    } finally {
+      // Menu and one-off scene sounds are not part of a simulation scan and
+      // should remain playable before or after this frame budget.
+      this.budget = null;
     }
   }
 
@@ -106,10 +113,14 @@ export class Sfx {
 
   /** Pitch climbs with the count, so a run of gems sounds like a run. */
   diamond(collected: number): void {
-    const step = [0, 3, 5, 7, 10, 12][collected % 6];
-    const base = 880 * Math.pow(2, step / 12);
-    this.tone(base, 0.1, 0.14, 'square', base * 1.5);
-    this.tone(base * 2, 0.07, 0.1, 'triangle', base * 3);
+    const phrase = [0, 2, 5, 7, 9, 12];
+    const slot = Math.max(0, collected - 1) % phrase.length;
+    const base = 659.25 * Math.pow(2, phrase[slot] / 12);
+    this.tone(base, 0.16, 0.12, 'triangle', base * 1.015);
+    this.tone(base * 2, 0.23, 0.045, 'sine', undefined, 0.018);
+    if (slot === phrase.length - 1) {
+      this.tone(base * 1.5, 0.3, 0.055, 'sine', undefined, 0.045);
+    }
   }
 
   explosion(): void {
@@ -118,8 +129,9 @@ export class Sfx {
   }
 
   magicChime(): void {
-    this.tone(1320, 0.22, 0.1, 'sine', 1980);
-    this.tone(1760, 0.18, 0.07, 'sine', 2640);
+    this.tone(523.25, 0.24, 0.075, 'triangle', 784.88);
+    this.tone(783.99, 0.28, 0.065, 'sine', 1046.5, 0.035);
+    this.tone(1174.66, 0.32, 0.04, 'sine', undefined, 0.07);
   }
 
   magicStop(): void {
@@ -144,7 +156,14 @@ export class Sfx {
 
   exitOpen(): void {
     for (let i = 0; i < 4; i += 1) {
-      this.tone(440 * Math.pow(2, i / 4), 0.5, 0.14, 'square', 880, i * 0.07);
+      this.tone(
+        440 * Math.pow(2, [0, 4, 7, 12][i] / 12),
+        0.46,
+        0.12,
+        'triangle',
+        undefined,
+        i * 0.075,
+      );
     }
   }
 
@@ -205,8 +224,7 @@ export class Sfx {
   ): void {
     const ctx = this.engine.ctx;
     const bus = this.engine.sfxBus;
-    if (!ctx || !bus || this.budget <= 0) return;
-    this.budget -= 1;
+    if (!ctx || !bus || !this.claimVoice()) return;
 
     const start = ctx.currentTime + delay;
     const osc = ctx.createOscillator();
@@ -239,17 +257,18 @@ export class Sfx {
   ): void {
     const ctx = this.engine.ctx;
     const bus = this.engine.sfxBus;
-    if (!ctx || !bus || this.budget <= 0) return;
-    this.budget -= 1;
+    if (!ctx || !bus || !this.claimVoice()) return;
 
     const start = ctx.currentTime;
     const frames = Math.max(1, Math.floor(ctx.sampleRate * duration));
-    const buffer = ctx.createBuffer(1, frames, ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < frames; i += 1) data[i] = Math.random() * 2 - 1;
+    if (!this.noiseBuffer || this.noiseBuffer.sampleRate !== ctx.sampleRate) {
+      this.noiseBuffer = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+      const data = this.noiseBuffer.getChannelData(0);
+      for (let i = 0; i < data.length; i += 1) data[i] = Math.random() * 2 - 1;
+    }
 
     const source = ctx.createBufferSource();
-    source.buffer = buffer;
+    source.buffer = this.noiseBuffer;
 
     const biquad = ctx.createBiquadFilter();
     biquad.type = filter.type;
@@ -266,11 +285,19 @@ export class Sfx {
     source.connect(biquad);
     biquad.connect(gain);
     gain.connect(bus);
-    source.start(start);
+    const room = Math.max(0, 1 - frames / ctx.sampleRate);
+    source.start(start, Math.random() * room, duration);
     source.onended = () => {
       source.disconnect();
       biquad.disconnect();
       gain.disconnect();
     };
+  }
+
+  private claimVoice(): boolean {
+    if (this.budget === null) return true;
+    if (this.budget <= 0) return false;
+    this.budget -= 1;
+    return true;
   }
 }

@@ -1,4 +1,59 @@
 import { Dir, type Direction } from '../engine/tiles';
+import { NO_INPUT, type PlayerInput } from '../engine/simTypes';
+
+/** Preserves short pointer presses, including grab, until a simulation scan. */
+export class PointerBuffer {
+  private readonly held = new Map<string, PlayerInput>();
+  private buffered: PlayerInput = NO_INPUT;
+  private bufferedSource: string | null = null;
+
+  set(source: string, dir: Direction | null, grab = false): void {
+    if (dir === null) {
+      this.held.delete(source);
+      if (this.bufferedSource === source) this.consume();
+      return;
+    }
+    const previous = this.held.get(source);
+    if (previous?.dir === dir && previous.grab === grab) return;
+    const command = { dir, grab };
+    this.held.delete(source);
+    this.held.set(source, command);
+    this.buffered = command;
+    this.bufferedSource = source;
+  }
+
+  release(source: string): void {
+    this.held.delete(source);
+  }
+
+  resolve(): PlayerInput {
+    let command = this.buffered;
+    for (const held of this.held.values()) command = held;
+    return command;
+  }
+
+  consume(): void {
+    this.buffered = NO_INPUT;
+    this.bufferedSource = null;
+  }
+
+  clear(): void {
+    this.held.clear();
+    this.consume();
+  }
+}
+
+/** One action per physical press, including across a pause/resume boundary. */
+export class ButtonEdges {
+  private readonly held = new Set<string>();
+
+  press(button: string, down: boolean): boolean {
+    const rising = down && !this.held.has(button);
+    if (down) this.held.add(button);
+    else this.held.delete(button);
+    return rising;
+  }
+}
 
 /**
  * Resolves which way the player is actually trying to go.

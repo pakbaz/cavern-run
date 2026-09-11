@@ -5,8 +5,6 @@ import {
   computeLayout,
   MAX_TILES_H,
   MAX_TILES_W,
-  MIN_TILES_H,
-  MIN_TILES_W,
   refreshLayout,
   setLayout,
   DEFAULT_LAYOUT,
@@ -76,9 +74,9 @@ describe('computeLayout', () => {
     for (const [name, w, h, dpr] of DEVICES) {
       const l = computeLayout(w, h, dpr);
       const within =
-        l.tilesW >= MIN_TILES_W &&
+        l.tilesW >= 8 &&
         l.tilesW <= MAX_TILES_W &&
-        l.tilesH >= MIN_TILES_H &&
+        l.tilesH >= 7 &&
         l.tilesH <= MAX_TILES_H;
       expect(`${name}: ${l.tilesW}x${l.tilesH} ok=${within}`).toBe(
         `${name}: ${l.tilesW}x${l.tilesH} ok=true`,
@@ -136,32 +134,31 @@ describe('computeLayout', () => {
     expect(cellCss(2560, 1440)).toBeGreaterThan(cellCss(1280, 720) * 1.5);
   });
 
-  it('fills a desktop window instead of letterboxing it', () => {
+  it('fills phones, tablets and desktops without reserving control space', () => {
     // A canvas whose shape differs from the window's gets black bars once it
     // is fitted, which is what made the game look small on a monitor.
-    for (const [name, w, h, dpr] of DESKTOPS) {
+    for (const [name, w, h, dpr] of [...DEVICES, ...DESKTOPS]) {
       const l = computeLayout(w, h, dpr);
       const scale = Math.min(w / l.width, h / l.height);
       const covered = ((l.width * scale) / w) * ((l.height * scale) / h);
 
-      expect(`${name}: ${covered >= 0.95}`).toBe(`${name}: true`);
+      expect(covered, name).toBeGreaterThanOrEqual(0.995);
     }
   });
 
-  it('leaves the phone layouts alone', () => {
-    // Touch play was tuned against these exact figures; widening the desktop
-    // view must not have moved them.
-    expect(computeLayout(375, 667, 2)).toMatchObject({ tilesW: 12, tilesH: 20 });
-    expect(computeLayout(393, 852, 3)).toMatchObject({ tilesW: 12, tilesH: 20 });
-    expect(computeLayout(852, 393, 3)).toMatchObject({ tilesW: 26, tilesH: 11 });
-    expect(computeLayout(412, 915, 2.6)).toMatchObject({ tilesW: 12, tilesH: 20 });
+  it('gives every pixel below the status bar to the cave', () => {
+    for (const [, w, h, dpr] of DEVICES) {
+      const result = computeLayout(w, h, dpr);
+      expect(result.height).toBe(result.worldHeight + HUD_HEIGHT);
+      expect(result.width / result.height).toBeCloseTo(w / h, 2);
+    }
   });
 
   it('stays playable in a tiny frame', () => {
     const l = computeLayout(320, 240, 1);
 
-    expect(l.tilesW).toBeGreaterThanOrEqual(MIN_TILES_W);
-    expect(l.tilesH).toBeGreaterThanOrEqual(MIN_TILES_H);
+    expect(l.tilesW).toBeGreaterThanOrEqual(8);
+    expect(l.tilesH).toBeGreaterThanOrEqual(7);
   });
 
   it('survives a degenerate window', () => {
@@ -172,29 +169,28 @@ describe('computeLayout', () => {
     ]) {
       const l = computeLayout(w, h, 1);
       expect(Number.isFinite(l.width)).toBe(true);
-      expect(l.tilesW).toBe(MIN_TILES_W);
-      expect(l.tilesH).toBe(MIN_TILES_H);
+      expect(l.tilesW).toBeGreaterThan(0);
+      expect(l.tilesH).toBeGreaterThan(0);
     }
   });
 
-  it('derives the canvas size from the cell counts and the status bar', () => {
+  it('covers partial edge tiles without stretching the square cave cells', () => {
     const l = computeLayout(1440, 900, 2);
 
-    expect(l.width).toBe(l.tilesW * TILE_SIZE);
-    expect(l.worldHeight).toBe(l.tilesH * TILE_SIZE);
+    expect(l.tilesW).toBe(Math.ceil(l.width / TILE_SIZE));
+    expect(l.tilesH).toBe(Math.ceil(l.worldHeight / TILE_SIZE));
     expect(l.height).toBe(l.worldHeight + HUD_HEIGHT);
   });
 });
 
 describe('refreshLayout', () => {
-  it('reports a change only when the cell counts move', () => {
+  it('reports changes in actual canvas bounds, not repeated measurements', () => {
     setLayout(DEFAULT_LAYOUT);
 
     expect(refreshLayout(1440, 900, 2)).toBe(true);
     // Same window again: nothing to rebuild.
     expect(refreshLayout(1440, 900, 2)).toBe(false);
-    // A few pixels of browser chrome should not thrash the whole scene.
-    expect(refreshLayout(1442, 899, 2)).toBe(false);
+    expect(refreshLayout(1512, 982, 2)).toBe(true);
   });
 
   it('adopts the new layout', () => {

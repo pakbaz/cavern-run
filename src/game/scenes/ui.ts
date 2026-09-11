@@ -20,6 +20,14 @@ export const Ink = {
   accent: '#6fb6ff',
 } as const;
 
+/** Deep ink the UI is drawn on, as numbers, for Graphics work. */
+export const Slab = {
+  body: 0x070c18,
+  edge: 0x2b3d57,
+  edgeLit: 0x4f7bb0,
+  glow: 0x6fb6ff,
+} as const;
+
 export function titleStyle(size = 40): Phaser.Types.GameObjects.Text.TextStyle {
   return {
     fontFamily: FONT,
@@ -27,6 +35,7 @@ export function titleStyle(size = 40): Phaser.Types.GameObjects.Text.TextStyle {
     color: Ink.bright,
     stroke: '#04070f',
     strokeThickness: 6,
+    shadow: { offsetX: 0, offsetY: 3, color: '#000a16', blur: 10, stroke: false, fill: true },
   };
 }
 
@@ -40,7 +49,15 @@ export function bodyStyle(size = 14, color: string = Ink.body): Phaser.Types.Gam
   };
 }
 
-/** A dark rounded slab to sit UI on top of, so text never fights the art. */
+/**
+ * A dark rounded slab to sit UI on top of, so text never fights the art.
+ *
+ * Built in four passes: a soft halo that separates the slab from whatever is
+ * behind it, a body that is darker at the bottom than the top, a hairline of
+ * light along the top edge, and cut corners in the game's accent blue. The
+ * result reads as a piece of equipment bolted to the rock rather than as a
+ * rounded rectangle from a dashboard.
+ */
 export function panel(
   scene: Phaser.Scene,
   x: number,
@@ -50,10 +67,62 @@ export function panel(
   alpha = 0.82,
 ): Phaser.GameObjects.Graphics {
   const g = scene.add.graphics();
-  g.fillStyle(0x060a14, alpha);
-  g.fillRoundedRect(x, y, width, height, 10);
-  g.lineStyle(2, 0x2b3d57, 0.9);
-  g.strokeRoundedRect(x, y, width, height, 10);
+  const radius = Math.min(12, height / 3);
+
+  // Halo.
+  g.fillStyle(0x000000, alpha * 0.35);
+  g.fillRoundedRect(x - 3, y - 2, width + 6, height + 8, radius + 3);
+
+  // Body, then a few stacked veils that darken it toward the floor.
+  g.fillStyle(Slab.body, alpha);
+  g.fillRoundedRect(x, y, width, height, radius);
+  for (let i = 0; i < 5; i += 1) {
+    const top = y + height * (0.34 + i * 0.13);
+    if (top >= y + height - 2) break;
+    g.fillStyle(0x000000, 0.07);
+    g.fillRoundedRect(x + 1, top, width - 2, y + height - top - 1, radius);
+  }
+  g.fillStyle(0xffffff, 0.035);
+  g.fillRoundedRect(x + 1, y + 1, width - 2, height * 0.3, radius);
+
+  // Frame, with a lit top edge.
+  g.lineStyle(2, Slab.edge, 0.9);
+  g.strokeRoundedRect(x, y, width, height, radius);
+  g.lineStyle(1, Slab.edgeLit, 0.5);
+  g.beginPath();
+  g.moveTo(x + radius, y + 1);
+  g.lineTo(x + width - radius, y + 1);
+  g.strokePath();
+
+  // Corner ticks: four short marks, the one flourish on an otherwise plain box.
+  const tick = Math.min(14, width * 0.08);
+  g.lineStyle(2, Slab.glow, 0.55);
+  for (const [cx, sx] of [[x + radius * 0.6, 1], [x + width - radius * 0.6, -1]] as const) {
+    for (const [cy, sy] of [[y + radius * 0.6, 1], [y + height - radius * 0.6, -1]] as const) {
+      g.beginPath();
+      g.moveTo(cx + sx * tick, cy);
+      g.lineTo(cx, cy);
+      g.lineTo(cx, cy + sy * tick * 0.7);
+      g.strokePath();
+    }
+  }
+
+  return g;
+}
+
+/** A hairline rule, for separating a heading from what it heads. */
+export function divider(
+  scene: Phaser.Scene,
+  x: number,
+  y: number,
+  width: number,
+  color: number = Slab.edgeLit,
+): Phaser.GameObjects.Graphics {
+  const g = scene.add.graphics();
+  g.fillStyle(color, 0.5);
+  g.fillRect(x, y, width, 1);
+  g.fillStyle(color, 0.16);
+  g.fillRect(x, y + 1, width, 1);
   return g;
 }
 
@@ -94,8 +163,13 @@ export function pad(value: number, width: number): string {
 export function onLayoutChanged(scene: Phaser.Scene, handler: () => void): void {
   const game = scene.game;
   game.events.on(LAYOUT_CHANGED, handler);
-  scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => game.events.off(LAYOUT_CHANGED, handler));
-  scene.events.once(Phaser.Scenes.Events.DESTROY, () => game.events.off(LAYOUT_CHANGED, handler));
+  const cleanup = (): void => {
+    game.events.off(LAYOUT_CHANGED, handler);
+    scene.events.off(Phaser.Scenes.Events.SHUTDOWN, cleanup);
+    scene.events.off(Phaser.Scenes.Events.DESTROY, cleanup);
+  };
+  scene.events.once(Phaser.Scenes.Events.SHUTDOWN, cleanup);
+  scene.events.once(Phaser.Scenes.Events.DESTROY, cleanup);
 }
 
 /**
@@ -139,6 +213,16 @@ export function menuScale(): number {
  */
 export function designY(y: number): number {
   return layout().height / 2 + (y - DESIGN_HEIGHT / 2) * menuScale();
+}
+
+/**
+ * The inverse of `designY`: which design row a canvas position falls on.
+ *
+ * Screens that mix hand-placed cards with art pinned to the bottom edge need
+ * this to work out how much room is actually left between the two.
+ */
+export function designRowAt(screenY: number): number {
+  return DESIGN_HEIGHT / 2 + (screenY - layout().height / 2) / menuScale();
 }
 
 /** Map a horizontal offset from the centre of the design onto the canvas. */

@@ -19,6 +19,7 @@ import type { CaveSpec } from '../levels/caveFormat';
 import {
   DIAMOND_FRAMES,
   DIRT_VARIANTS,
+  EDGE_TERRAIN_VARIANTS,
   TextureKey,
   AMOEBA_FRAMES,
   BIRTH_FRAMES,
@@ -29,12 +30,15 @@ import {
   PLAYER_IDLE_FRAMES,
   PLAYER_RUN_FRAMES,
   SLIME_FRAMES,
+  cavityFrame,
+  edgeFrame,
 } from './TextureFactory';
 import {
   animFrame,
   approachCamera,
   cameraTarget,
   clamp,
+  edgeMask,
   interpolate,
   tileCentre,
   tileVariant,
@@ -42,9 +46,23 @@ import {
 } from './renderMath';
 
 /** The visible cave size right now, which changes when the window does. */
+/**
+ * The visible cave size right now, in cells, which changes when the window
+ * does.
+ *
+ * Deliberately fractional rather than the layout's whole-tile counts. The
+ * canvas matches the window's aspect ratio exactly, so the last column and row
+ * on screen are usually partial ones: the camera works in these units, and
+ * rounding them up would make it believe the view is up to a cell wider and
+ * taller than it is. It would then stop scrolling early at the right and
+ * bottom edges of a cave, leaving a strip the player could never quite see.
+ *
+ * Culling copes with the fraction on its own -- `visibleTiles` ceils and adds
+ * a margin cell, so a partly visible column is still drawn.
+ */
 function viewport(): { widthTiles: number; heightTiles: number } {
-  const { tilesW, tilesH } = layout();
-  return { widthTiles: tilesW, heightTiles: tilesH };
+  const { width, worldHeight } = layout();
+  return { widthTiles: width / TILE_SIZE, heightTiles: worldHeight / TILE_SIZE };
 }
 
 /**
@@ -54,6 +72,27 @@ function viewport(): { widthTiles: number; heightTiles: number } {
  */
 const PARALLAX_FAR = 0.22;
 const PARALLAX_NEAR = 0.48;
+
+/**
+ * Where the two carved-edge passes sit in the stack.
+ *
+ * Bevels go over the rock they belong to but under the shadows anything
+ * standing on that rock casts. Cavity occlusion goes behind everything: it is
+ * the hole, and boulders, gems and the miner are all in front of it.
+ */
+const EDGE_DEPTH = Depth.Tiles + 1;
+const CAVITY_DEPTH = Depth.Background + 1;
+
+/**
+ * Per-cell tints for soil, as multiplicative white-ish greys.
+ *
+ * Kept within a few percent of white: enough that a wall of dirt has patches
+ * of packed and loose earth in it, never so much that the tile boundaries
+ * themselves become the pattern.
+ */
+const DIRT_TINTS: readonly number[] = [
+  0xffffff, 0xf2ece6, 0xe9e2db, 0xfbf6f0, 0xece6df, 0xf7f1ea, 0xe4ddd6, 0xf4eee8,
+];
 
 /** Contact-shadow strength per tile. Anything absent casts no shadow. */
 const SHADOW_ALPHA: Readonly<Record<number, number>> = {
@@ -83,6 +122,31 @@ const BLOOM: Readonly<Record<number, { tint: number; radius: number; alpha: numb
 };
 
 /**
+ * Tiles that are part of the rock itself rather than something sitting in it.
+ *
+ * This is what the carved-edge pass is built on: two neighbouring pieces of
+ * rock share no seam, and every face that borders anything else is a face the
+ * player (or a blast) opened up, so it gets lit accordingly.
+ */
+function isRock(tile: TileId): boolean {
+  switch (tile) {
+    case Tile.Dirt:
+    case Tile.Wall:
+    case Tile.Steel:
+    case Tile.MagicWall:
+    case Tile.ExpandingWallH:
+    case Tile.ExpandingWallV:
+    case Tile.ExpandingWallAny:
+    case Tile.ExitClosed:
+    case Tile.ExitOpen:
+    case Tile.Slime:
+      return true;
+    default:
+      return false;
+  }
+}
+
+/**
  * Draws the cave.
  *
  * The simulation runs at 7-9 scans a second, which on its own looks
@@ -102,6 +166,10 @@ export class WorldRenderer {
   private readonly pool: Phaser.GameObjects.Image[] = [];
   private readonly shadows: Phaser.GameObjects.Image[] = [];
   private readonly blooms: Phaser.GameObjects.Image[] = [];
+  /** Lit bevels on rock faces the player has dug open. */
+  private readonly edges: Phaser.GameObjects.Image[] = [];
+  /** Occlusion pressed into the empty cells those faces surround. */
+  private readonly cavities: Phaser.GameObjects.Image[] = [];
 
   private backdrop: Phaser.GameObjects.TileSprite | null = null;
   private strataFar: Phaser.GameObjects.TileSprite | null = null;
@@ -121,6 +189,11 @@ export class WorldRenderer {
   /** Screen-space position of the player, for the lighting layer to follow. */
   playerScreenX = 0;
   playerScreenY = 0;
+
+  /** Which way the miner is looking, so the lamp can lead them. */
+  get playerFacing(): number {
+    return this.facing;
+  }
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -177,10 +250,31 @@ export class WorldRenderer {
     let used = 0;
     let shadowsUsed = 0;
     let bloomsUsed = 0;
+    let edgesUsed = 0;
+    let cavitiesUsed = 0;
 
     for (let y = range.minY; y <= range.maxY; y += 1) {
       for (let x = range.minX; x <= range.maxX; x += 1) {
         const tile = cave.get(x, y);
+
+        // Carved-edge pass. Rock gets a bevel on the faces that have been
+        // opened; everything else gets the hole it is sitting in.
+        const rock = isRock(tile);
+        const mask = this.neighbourMask(cave, x, y, rock);
+        if (mask !== 0) {
+          const frame = rock
+            ? edgeFrame(mask, tileVariant(x, y, EDGE_TERRAIN_VARIANTS))
+            : cavityFrame(mask);
+          const pool = rock ? this.edges : this.cavities;
+          const index = rock ? edgesUsed : cavitiesUsed;
+          const overlay = this.take(pool, index, TextureKey.edges, rock ? EDGE_DEPTH : CAVITY_DEPTH);
+          if (rock) edgesUsed += 1;
+          else cavitiesUsed += 1;
+          if (overlay.frame.name !== frame) overlay.setTexture(TextureKey.edges, frame);
+          overlay.setPosition(tileCentre(x), tileCentre(y));
+          overlay.setVisible(true);
+        }
+
         if (tile === Tile.Empty) continue;
 
         const sprite = this.take(this.pool, used, TextureKey.spark, Depth.Tiles);
@@ -201,7 +295,7 @@ export class WorldRenderer {
         }
         sprite.setPosition(drawX, drawY);
 
-        this.style(sprite, tile, runtime, x, arrival, alpha);
+        this.style(sprite, tile, runtime, x, y, arrival, alpha);
         sprite.setVisible(true);
 
         if (tile === Tile.Player || tile === Tile.PlayerBirth) {
@@ -243,10 +337,12 @@ export class WorldRenderer {
     hideFrom(this.pool, used);
     hideFrom(this.shadows, shadowsUsed);
     hideFrom(this.blooms, bloomsUsed);
+    hideFrom(this.edges, edgesUsed);
+    hideFrom(this.cavities, cavitiesUsed);
   }
 
   destroy(): void {
-    for (const list of [this.pool, this.shadows, this.blooms]) {
+    for (const list of [this.pool, this.shadows, this.blooms, this.edges, this.cavities]) {
       for (const sprite of list) sprite.destroy();
       list.length = 0;
     }
@@ -259,6 +355,29 @@ export class WorldRenderer {
   }
 
   /* ---------------------------------------------------------------- */
+
+  /**
+   * Which sides of a cell to treat.
+   *
+   * For rock, the mask is the sides that face open space, and each of those
+   * gets a bevel lit by where it points. For anything else, it is the sides
+   * that face rock, and those press occlusion into the cell instead. Beyond
+   * the edge of the cave counts as rock, so the border of a cave is never
+   * bevelled against nothing.
+   */
+  private neighbourMask(cave: Cave, x: number, y: number, forRock: boolean): number {
+    const solid = (nx: number, ny: number): boolean => {
+      if (nx < 0 || ny < 0 || nx >= cave.width || ny >= cave.height) return true;
+      return isRock(cave.get(nx, ny));
+    };
+    const up = solid(x, y - 1);
+    const right = solid(x + 1, y);
+    const down = solid(x, y + 1);
+    const left = solid(x - 1, y);
+    return forRock
+      ? edgeMask(!up, !right, !down, !left)
+      : edgeMask(up, right, down, left);
+  }
 
   /**
    * Build the three layers behind the cave: an opaque sheet of folded strata
@@ -372,12 +491,15 @@ export class WorldRenderer {
     tile: TileId,
     runtime: CaveRuntime,
     x: number,
+    y: number,
     arrival: TileMove | undefined,
     alpha: number,
   ): void {
     sprite.setAlpha(1);
     sprite.setScale(1);
     sprite.setFlipX(false);
+    sprite.setFlipY(false);
+    sprite.clearTint();
     sprite.setRotation(0);
     sprite.setDepth(Depth.Tiles);
     sprite.setBlendMode(Phaser.BlendModes.NORMAL);
@@ -420,6 +542,20 @@ export class WorldRenderer {
         // Pulse a little faster once it has turned aggressive.
         sprite.setAlpha(runtime.amoebaCanGrow ? 1 : 0.85);
         break;
+
+      case Tile.Dirt: {
+        // Eight sheets of soil still tile into a visible lattice across a
+        // wall forty cells wide. Flipping each cell on a hash of its position
+        // turns eight sheets into thirty-two, and a slight per-cell tint
+        // breaks the field into patches of packed and loose earth at a scale
+        // bigger than one tile -- which is what a wall of dirt actually looks
+        // like, and what stops the eye finding the grid.
+        const scatter = tileVariant(x + 7, y * 3 + 1, 8);
+        sprite.setFlipX((scatter & 1) !== 0);
+        sprite.setFlipY((scatter & 2) !== 0);
+        sprite.setTint(DIRT_TINTS[scatter % DIRT_TINTS.length]);
+        break;
+      }
 
       default:
         break;

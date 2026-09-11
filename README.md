@@ -70,24 +70,41 @@ and retains only the ten highest scores in D1.
 
 ## Controls
 
-| Action | Keyboard | Gamepad | Touch |
-| --- | --- | --- | --- |
-| Move / dig | Arrow keys or WASD | D-pad or left stick | Swipe or hold |
-| Grab without moving | Shift or Ctrl | A / X, shoulders or triggers | Hold one finger, swipe another |
-| Confirm | Enter or Space | &mdash; | Tap |
-| Pause | Esc or P | Start | &mdash; |
-| Restart cave | R | Select / Back | &mdash; |
+| Action | Keyboard | Mouse | Touch | Gamepad |
+| --- | --- | --- | --- | --- |
+| Move / dig | Arrow keys or WASD | Hold toward a cell | Swipe and hold | D-pad or left stick |
+| Grab without moving | Shift or Ctrl + direction | Right-click toward a cell | Hold one finger and swipe another | A / X, shoulders or triggers |
+| Confirm | Enter or Space | Click the button | Tap the button | &mdash; |
+| Pause | Esc or P | &mdash; | &mdash; | Start |
+| Restart cave | R | Pause, then Restart | Pause, then Restart | Select / Back |
 
 **Grab** scoops the dirt next to you without stepping into the gap. It is the
 difference between clearing the ground under a boulder and being under it.
 
 On touch, keep one finger planted and swipe a second one to grab in that
 direction. Either finger can be the one that moves, so it works whichever
-hand you hold the phone in.
+hand you hold the phone in. Lifting one finger from a two-finger grab stops
+movement until you make a new swipe. Short swipes are buffered so a quick
+gesture still registers between simulation scans.
+
+There are no on-screen movement controls. The cave uses all available space
+below the compact status bar. Mouse steering is directional, not automatic
+pathfinding: you still choose the safe route. Restarting costs a life.
+Use **FULL** at the right of the status bar for native fullscreen on supported
+mobile and desktop browsers; **BACK** leaves fullscreen. Browsers without
+native fullscreen still use the full available browser viewport.
+Fullscreen is also available from the title menu. Tap the MUSIC or SOUND
+row to cycle its volume, including mute, or use left/right on a keyboard.
+
+Each cave's introduction waits for Enter or a tap, giving you time to read
+the puzzle hint before starting. Switching tabs or leaving the game window
+pauses the cave instead of letting it continue without you.
 
 The view adapts to the screen: a phone in portrait sees a tall, narrow slice
 of the cave, the same phone on its side sees a wide, short one, and a desktop
-sees more of both. Rotating mid-cave keeps the run going.
+sees more of both. The canvas matches the window's aspect ratio, including
+partial tiles at its edges, rather than leaving bars around a fixed grid.
+Rotating mid-cave keeps the run going.
 
 ## The rules
 
@@ -110,27 +127,29 @@ sees more of both. Rotating mid-cave keeps the run going.
 
 | | Cave | Gems | Time | | Cave | Gems | Time |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| A | First Descent | 14 | 140 | K | Expanding Ruin | 20 | 135 |
-| B | Rockfall | 16 | 135 | L | Growth Chamber | 24 | 150 |
-| C | The Gallery | 20 | 140 | M | Slime Pits | 26 | 140 |
-| D | Pushing Through | 20 | 135 | N | Double Trouble | 24 | 145 |
-| E | Firefly Warren | 18 | 135 | O | Amoeba Bloom | 28 | 150 |
-| F | Crush Depth | 20 | 130 | P | The Crucible | 28 | 145 |
-| G | Butterfly Vault | 22 | 145 | Q | Nest of Wings | 30 | 145 |
-| H | Magic Seam | 24 | 140 | R | Choke Point | 26 | 135 |
-| I | The Sieve | 24 | 135 | S | Cascade | 30 | 140 |
-| J | Green Tide | 22 | 150 | T | One Way Out | 32 | 165 |
+| A | Buried River | 10 | 80 | K | Closing Shift | 17 | 65 |
+| B | Rockfall | 12 | 55 | L | Bloom Chase | 10 | 85 |
+| C | Side Pocket | 11 | 70 | M | Membrane Drop | 21 | 55 |
+| D | Switchbacks | 12 | 85 | N | Crossed Wires | 26 | 48 |
+| E | Spark Lock | 10 | 60 | O | Twin Blooms | 28 | 80 |
+| F | Double Fuse | 14 | 95 | P | Alloy and Wings | 16 | 70 |
+| G | Rich Strike | 7 | 45 | Q | Three Charges | 20 | 65 |
+| H | Seven Furnaces | 9 | 80 | R | Blast Passage | 20 | 65 |
+| I | Relay Kilns | 13 | 80 | S | Cascade Works | 14 | 55 |
+| J | Seed Crystal | 18 | 70 | T | Foundry Run | 33 | 130 |
 
-Each cave introduces one idea and then asks you to combine it with the last
-one. The caves also speed up as you descend: the simulation runs at 7 scans a
-second in the first pair and 9 by the last.
+Five challenge tiers introduce individual mechanics before combining them.
+Simulation speed rises in small steps from 6.5 to 9.25 scans per second.
+Each cave has its own clock, with room to learn early puzzles and tighter
+time pressure later. Briefings show the objective, required mechanics, and
+challenge tier before the player starts the clock.
 
 The layouts are built from structural motifs rather than scattered contents:
-bricked vaults with a single door, boulder rafts resting on the gems you want,
-guard cells you have to open deliberately, hoppers feeding a magic wall,
-sealed amoeba pockets held shut by a plug, and corridors an expanding wall is
-closing behind you. Every layout, quota, clock and name is original to this
-project.
+bricked vaults opened by creature blasts, boulder gates, furnaces feeding a
+magic wall, slime cascades, live amoeba vents that the player must plug, and
+corridors made irreversible by expanding walls. Production caves contain too
+few loose diamonds to meet the quota: creating and releasing the rest is the
+puzzle. Every layout, quota, clock and name is original to this project.
 
 ## How it is built
 
@@ -178,50 +197,37 @@ src/
 
 ### The look
 
-There are no image files either. `render/TextureFactory.ts` paints every
-sprite into a canvas at boot from one shared lighting model &mdash; a key
-light up and to the left, a cool fill from below &mdash; so a boulder, a
-diamond facet and a steel rivet all catch the light from the same place. Each
-cave recolours the whole set from its palette, which is why twenty caves that
-share one tileset still look like twenty different places.
+`render/TextureFactory.ts` paints all gameplay art at boot. Soil uses shaded
+clods instead of dense pixel noise; boulders have distinct flat facets, and
+the miner has an animated pick, lamp and larger silhouette. Fireflies,
+butterflies, aqua slime and lime amoebas each have a distinct shape or colour.
+The optional title poster stays behind this generated art.
 
-On top of that the world is drawn in layers: two scrolling strata sheets
-parallax behind the cave at different rates, everything solid casts a soft
-contact shadow, diamonds and the exit get an additive bloom that pulses, and
-boulders roll into the direction they are falling and squash when they land.
-The strata sheets are built from sine terms whose periods divide the sheet
-exactly in both axes, so the backdrop tiles forever without a seam.
+Carved edge lighting and contact shadows make newly dug tunnels read as
+openings in solid terrain. Layered strata sit behind the cave; diamonds and
+the exit glow, while the helmet lamp points ahead of the miner. Each palette
+has its own ambient light and particles. Reduced-motion mode suppresses
+ambient drifting, and the view fits partial edge tiles without stretching
+the square cave cells.
 
 ### The soundtrack
 
-The music is written by the game as you play, and every cave gets its own
-piece. A cave's theme fixes its mode, chord progression, melodic motif, groove,
-swing and timbres, and the twenty themes darken as you descend &mdash; open
-Dorian tunes at the top, airless Locrian ones that never resolve at the bottom
-&mdash; while the tier a cave sits in drops the tonic lower.
+All twenty legacy melodies have been replaced by new original compositions.
+Each cave has its own motif, rhythm, chord progression and bass pulse, named
+for its stage and shaped around its puzzle. A shared three-note cadence and
+subterranean instrument palette keep the campaign musically connected.
 
-A theme also carries its own voicing. The drum kit moves from a felt beater
-and a brushed snare at the top of the campaign to a gated slam at the bottom;
-a sine sub sits under the bass, weighted per cave; a struck FM bell shadows
-the melody an octave up in the caves that should ring; and a band of filtered
-air breathes under everything so the gaps between phrases still sound like a
-cave. The parts are spread across the stereo field &mdash; the pad's detuned
-halves thrown wide, the lead and its counter-line on opposite sides &mdash;
-and the whole score is fed to a convolution reverb built from a synthetic
-impulse with discrete early reflections, which is what tells the ear how far
-apart the walls are.
+The arrangement develops with the clock and nearby danger. Intensity changes
+smoothly, and larger arrangement changes wait for a bar boundary. One clear
+foreground melody sits over quiet pads, bass and restrained percussion.
+There is no competing counter-melody, melodic echo, panic drone or countdown
+ticker. Tempo changes remain small so danger does not overwhelm the tune.
 
-Inside a cave the piece is then *developed*, in four movements driven by the
-clock. It opens as pad and bass with the motif stated sparsely, then a
-sixteenth-note counter-line arrives and the melody fills in, its vibrato
-widening as the cave leans on you; past halfway the
-drums start rolling fills, a seventh sours the pad, the last bar of the loop is
-swapped for a chord that refuses to resolve, and a swell winds up into every
-repeat. For the endgame a dissonant pedal comes in underneath, the bass stops
-arpeggiating and hammers the root, and the whole tune is winched up a semitone.
-Layered on top of that, the arrangement reacts to how much trouble you are in:
-tempo, brightness and the drums all follow the nearest hazard and the diamonds
-you still owe, and a ticking layer counts out the final ten seconds.
+Stereo placement, a synthetic cave reverb and a mix compressor give the sounds
+depth while keeping the melody and gameplay cues clear. Short, bounded
+crossfades prevent old tracks from stacking up. Diamond collection,
+magic-wall conversion and opening the exit
+have distinct cues. The soundtrack and effects use no third-party recordings.
 
 ### Saved data
 

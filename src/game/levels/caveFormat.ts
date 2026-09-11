@@ -1,7 +1,14 @@
 import { CAVE_HEIGHT, CAVE_WIDTH } from '../../config';
 import { Cave } from '../engine/Cave';
 import type { CaveTuning } from '../engine/simTypes';
-import { Tile, isButterfly, type TileId } from '../engine/tiles';
+import {
+  Tile,
+  isBlastProof,
+  isButterfly,
+  isCreature,
+  isFallable,
+  type TileId,
+} from '../engine/tiles';
 
 /**
  * Caves are authored as ASCII art so a layout can be read, diffed and tweaked
@@ -52,7 +59,24 @@ export interface CaveSpec extends CaveTuning {
   readonly map: readonly string[];
   /** Short line of flavour shown on the intro card. */
   readonly hint: string;
+  /** One-line description of the concrete win plan for menus and briefings. */
+  readonly objective: string;
+  /** Primary rules a player must understand to complete this cave. */
+  readonly mechanics: readonly CaveMechanic[];
+  /** Campaign challenge tier, from introductory (1) through finale (5). */
+  readonly difficulty: 1 | 2 | 3 | 4 | 5;
 }
+
+export type CaveMechanic =
+  | 'digging'
+  | 'gravity'
+  | 'boulder-pushing'
+  | 'fireflies'
+  | 'butterflies'
+  | 'magic-wall'
+  | 'amoeba'
+  | 'expanding-wall'
+  | 'slime';
 
 export interface ParsedMap {
   readonly width: number;
@@ -151,6 +175,11 @@ export function validateCave(spec: CaveSpec): string[] {
 
   if (spec.timeLimit <= 0) problems.push(`${spec.id}: timeLimit must be positive`);
   if (spec.tickHz <= 0) problems.push(`${spec.id}: tickHz must be positive`);
+  if (!Number.isInteger(spec.difficulty) || spec.difficulty < 1 || spec.difficulty > 5) {
+    problems.push(`${spec.id}: difficulty must be an integer from 1 to 5`);
+  }
+  if (spec.objective.trim().length === 0) problems.push(`${spec.id}: objective must not be empty`);
+  if (spec.mechanics.length === 0) problems.push(`${spec.id}: mechanics must not be empty`);
 
   problems.push(...checkReachability(spec, parsed, amoebaCredit));
 
@@ -190,6 +219,25 @@ function checkReachability(spec: CaveSpec, parsed: ParsedMap, amoebaCredit: numb
 
     const x = index % width;
     const y = (index - x) / width;
+
+    // A reachable loaded support over a boxed creature is a deterministic
+    // demolition charge. Admit only the 3x3 blast footprint so a deliberate
+    // brick gate validates without treating arbitrary masonry as passable.
+    if (
+      tile === Tile.Dirt &&
+      isFallable(tiles[index - width] ?? Tile.Steel) &&
+      isCreature(tiles[index + width] ?? Tile.Steel)
+    ) {
+      for (let by = y; by <= y + 2; by += 1) {
+        for (let bx = x - 1; bx <= x + 1; bx += 1) {
+          if (bx < 0 || by < 0 || bx >= width || by >= height) continue;
+          const blast = by * width + bx;
+          if (seen[blast] === 1 || isBlastProof(tiles[blast])) continue;
+          seen[blast] = 1;
+          stack.push(blast);
+        }
+      }
+    }
 
     for (const [dx, dy] of NEIGHBOURS) {
       const nx = x + dx;
@@ -239,6 +287,32 @@ const AMOEBA_FOOD: ReadonlySet<TileId> = new Set<TileId>([Tile.Empty, Tile.Dirt,
  * its chamber is genuinely small enough is what stops that recurring.
  */
 function amoebaYield(spec: CaveSpec, parsed: ParsedMap): number {
+  const openRoom = amoebaRoom(parsed);
+  if (openRoom === 0) return 0;
+  if (openRoom < spec.amoebaMaxSize) return openRoom;
+
+  // Some campaign puzzles ask the player to slide a boulder along a short
+  // horizontal rail into the amoeba's escape choke. Test every reachable stop
+  // on such a rail and credit only a genuinely bounded post-push chamber.
+  let containedRoom = 0;
+  for (let index = 0; index < parsed.tiles.length; index += 1) {
+    if (parsed.tiles[index] !== Tile.Boulder) continue;
+    const x = index % parsed.width;
+    const y = Math.floor(index / parsed.width);
+
+    for (const dx of [-1, 1]) {
+      for (let nx = x + dx; nx > 0 && nx < parsed.width - 1; nx += dx) {
+        const destination = y * parsed.width + nx;
+        if (parsed.tiles[destination] !== Tile.Empty) break;
+        const room = amoebaRoom(parsed, destination, index);
+        if (room < spec.amoebaMaxSize) containedRoom = Math.max(containedRoom, room);
+      }
+    }
+  }
+  return containedRoom;
+}
+
+function amoebaRoom(parsed: ParsedMap, blocked = -1, vacated = -1): number {
   const { width, height, tiles } = parsed;
   const seen = new Uint8Array(width * height);
   const stack: number[] = [];
@@ -264,13 +338,14 @@ function amoebaYield(spec: CaveSpec, parsed: ParsedMap): number {
       const ny = y + dy;
       if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
       const next = ny * width + nx;
-      if (seen[next] === 1 || !AMOEBA_FOOD.has(tiles[next])) continue;
+      const tile = next === vacated ? Tile.Empty : tiles[next];
+      if (next === blocked || seen[next] === 1 || !AMOEBA_FOOD.has(tile)) continue;
       seen[next] = 1;
       stack.push(next);
     }
   }
 
-  return room < spec.amoebaMaxSize ? room : 0;
+  return room;
 }
 
 const NEIGHBOURS: ReadonlyArray<readonly [number, number]> = [

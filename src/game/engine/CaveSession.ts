@@ -97,7 +97,7 @@ export class CaveSession {
    * cannot make the cave fast-forward through several scans at once and kill
    * the player before the frame is even drawn.
    */
-  update(deltaMs: number, input: PlayerInput = NO_INPUT): SessionUpdate {
+  update(deltaMs: number, input: PlayerInput | (() => PlayerInput) = NO_INPUT): SessionUpdate {
     this.collectedEvents.length = 0;
     let ticks = 0;
 
@@ -107,7 +107,8 @@ export class CaveSession {
 
       while (this.accumulator >= step && this.sim.isRunning) {
         this.accumulator -= step;
-        for (const event of this.sim.tick(input)) this.collectedEvents.push(event);
+        const command = typeof input === 'function' ? input() : input;
+        for (const event of this.sim.tick(command)) this.collectedEvents.push(event);
         ticks += 1;
       }
     }

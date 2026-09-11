@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 
 import { Dir, type Direction } from '../engine/tiles';
 import type { PlayerInput } from '../engine/simTypes';
-import { DirectionLatch, stickDirection, touchCommand, type TouchDrag } from './inputMath';
+import { ButtonEdges, DirectionLatch, PointerBuffer, stickDirection, swipeDirection, touchCommand, type TouchDrag } from './inputMath';
 
 export { DirectionLatch, stickDirection, swipeDirection, touchCommand } from './inputMath';
 
@@ -31,6 +31,11 @@ const GAMEPAD_GRAB_BUTTONS = [0, 2, 4, 5, 6, 7];
 const GAMEPAD_PAUSE_BUTTONS = [9];
 const GAMEPAD_RESTART_BUTTONS = [8];
 
+interface PointerOptions {
+  readonly contains: (x: number, y: number) => boolean;
+  readonly playerPosition: () => { x: number; y: number };
+}
+
 /**
  * Every way of steering the miner, funnelled into one `PlayerInput`.
  *
@@ -41,7 +46,14 @@ const GAMEPAD_RESTART_BUTTONS = [8];
  */
 export class InputManager {
   private readonly scene: Phaser.Scene;
+  private readonly pointerOptions?: PointerOptions;
   private readonly latch = new DirectionLatch();
+  private readonly pointerBuffer = new PointerBuffer();
+  private readonly padEdges = new ButtonEdges();
+  private readonly heldKeys = new Set<string>();
+  private mousePointer: Phaser.Input.Pointer | null = null;
+  private destroyed = false;
+  private bufferedKeyboardGrab = false;
 
   private keyboardGrab = false;
   private pausePressed = false;
@@ -62,20 +74,26 @@ export class InputManager {
   private readonly onKeyDown: (event: KeyboardEvent) => void;
   private readonly onKeyUp: (event: KeyboardEvent) => void;
   private readonly onBlur: () => void;
+  private readonly onVisibility: () => void;
 
-  constructor(scene: Phaser.Scene) {
+  constructor(scene: Phaser.Scene, pointerOptions?: PointerOptions) {
     this.scene = scene;
+    this.pointerOptions = pointerOptions;
 
     this.onKeyDown = (event) => this.handleKey(event, true);
     this.onKeyUp = (event) => this.handleKey(event, false);
     // A key held while the tab loses focus never sends its keyup, which would
     // leave the miner walking into a wall forever.
     this.onBlur = () => this.reset();
+    this.onVisibility = () => { if (document.hidden) this.reset(); };
 
     const keyboard = scene.input.keyboard;
     keyboard?.on('keydown', this.onKeyDown);
     keyboard?.on('keyup', this.onKeyUp);
     window.addEventListener('blur', this.onBlur);
+    document.addEventListener('visibilitychange', this.onVisibility);
+    scene.game.canvas.addEventListener('pointercancel', this.onBlur);
+    scene.game.canvas.addEventListener('touchcancel', this.onBlur);
 
     scene.input.on(Phaser.Input.Events.POINTER_DOWN, this.handlePointerDown, this);
     scene.input.on(Phaser.Input.Events.POINTER_MOVE, this.handlePointerMove, this);
@@ -89,11 +107,33 @@ export class InputManager {
   /** The input to feed the next simulation scan. */
   sample(): PlayerInput {
     const pad = this.readGamepad();
-    const touch = this.readTouch();
+    this.updateMouse();
+    const pointer = this.pointerBuffer.resolve();
+    const dir = pad.dir ?? pointer.dir ?? this.latch.resolve();
     return {
-      dir: pad.dir ?? touch.dir ?? this.latch.resolve(),
-      grab: this.keyboardGrab || touch.grab || pad.grab,
+      dir,
+      grab: this.keyboardGrab || this.bufferedKeyboardGrab || pointer.grab || pad.grab,
     };
+  }
+
+  private updateGesture(): void {
+    const command = this.readTouch();
+    this.pointerBuffer.set('gesture', command.dir, command.grab);
+  }
+
+  private updateMouse(): void {
+    const pointer = this.mousePointer;
+    if (!pointer || !this.pointerOptions) return;
+    if (!this.pointerOptions.contains(pointer.x, pointer.y)) {
+      this.pointerBuffer.set('mouse', null);
+      return;
+    }
+    const player = this.pointerOptions.playerPosition();
+    this.pointerBuffer.set(
+      'mouse',
+      swipeDirection(pointer.x - player.x, pointer.y - player.y, 16),
+      pointer.rightButtonDown() || this.keyboardGrab,
+    );
   }
 
   private readTouch(): { dir: Direction | null; grab: boolean } {
@@ -109,6 +149,8 @@ export class InputManager {
   /** Tell the latch a scan has been consumed, so buffered taps expire. */
   consumeTick(): void {
     this.latch.consume();
+    this.pointerBuffer.consume();
+    this.bufferedKeyboardGrab = false;
   }
 
   /** True once per press. */
@@ -134,16 +176,30 @@ export class InputManager {
   reset(): void {
     this.latch.clear();
     this.keyboardGrab = false;
+    this.bufferedKeyboardGrab = false;
+    this.heldKeys.clear();
+    this.pointerBuffer.clear();
+    this.mousePointer = null;
     this.touches.clear();
     this.primaryTouch = null;
     this.primaryMoved = false;
+    this.pausePressed = false;
+    this.restartPressed = false;
+    this.confirmPressed = false;
   }
 
   destroy(): void {
+    if (this.destroyed) return;
+    this.destroyed = true;
     const keyboard = this.scene.input.keyboard;
     keyboard?.off('keydown', this.onKeyDown);
     keyboard?.off('keyup', this.onKeyUp);
     window.removeEventListener('blur', this.onBlur);
+    document.removeEventListener('visibilitychange', this.onVisibility);
+    this.scene.game.canvas.removeEventListener('pointercancel', this.onBlur);
+    this.scene.game.canvas.removeEventListener('touchcancel', this.onBlur);
+    this.scene.events.off(Phaser.Scenes.Events.SHUTDOWN, this.destroy, this);
+    this.scene.events.off(Phaser.Scenes.Events.DESTROY, this.destroy, this);
 
     this.scene.input.off(Phaser.Input.Events.POINTER_DOWN, this.handlePointerDown, this);
     this.scene.input.off(Phaser.Input.Events.POINTER_MOVE, this.handlePointerMove, this);
@@ -153,18 +209,31 @@ export class InputManager {
 
   private handleKey(event: KeyboardEvent, down: boolean): void {
     const code = event.code;
+    if (DIRECTION_KEYS.some(([key]) => key === code) || GRAB_KEYS.has(code)
+      || PAUSE_KEYS.has(code) || CONFIRM_KEYS.has(code)) event.preventDefault();
+    if (down) {
+      if (event.repeat || this.heldKeys.has(code)) return;
+      this.heldKeys.add(code);
+    } else {
+      this.heldKeys.delete(code);
+    }
 
     for (const [key, dir] of DIRECTION_KEYS) {
       if (key !== code) continue;
       // Stop the arrow keys scrolling the page under the canvas.
       event.preventDefault();
-      if (down) this.latch.press(dir);
-      else this.latch.release(dir);
+      if (down) {
+        this.latch.press(dir);
+        this.bufferedKeyboardGrab = this.keyboardGrab;
+      } else if (!DIRECTION_KEYS.some(([other, direction]) => direction === dir && this.heldKeys.has(other))) {
+        this.latch.release(dir);
+      }
       return;
     }
 
     if (GRAB_KEYS.has(code)) {
-      this.keyboardGrab = down;
+      event.preventDefault();
+      this.keyboardGrab = [...GRAB_KEYS].some((key) => this.heldKeys.has(key));
       return;
     }
 
@@ -183,7 +252,11 @@ export class InputManager {
 
   private readGamepad(): { dir: Direction | null; grab: boolean } {
     const pad = this.scene.input.gamepad?.getPad(0);
-    if (!pad) return { dir: null, grab: false };
+    if (!pad) {
+      this.padEdges.press('pause', false);
+      this.padEdges.press('restart', false);
+      return { dir: null, grab: false };
+    }
 
     let dir: Direction | null = null;
     if (pad.up) dir = Dir.Up;
@@ -193,11 +266,11 @@ export class InputManager {
 
     dir ??= stickDirection(pad.leftStick.x, pad.leftStick.y);
 
-    for (const button of GAMEPAD_PAUSE_BUTTONS) {
-      if (pad.buttons[button]?.pressed) this.pausePressed = true;
+    if (this.padEdges.press('pause', GAMEPAD_PAUSE_BUTTONS.some((button) => pad.buttons[button]?.pressed))) {
+      this.pausePressed = true;
     }
-    for (const button of GAMEPAD_RESTART_BUTTONS) {
-      if (pad.buttons[button]?.pressed) this.restartPressed = true;
+    if (this.padEdges.press('restart', GAMEPAD_RESTART_BUTTONS.some((button) => pad.buttons[button]?.pressed))) {
+      this.restartPressed = true;
     }
 
     const grab = GAMEPAD_GRAB_BUTTONS.some((button) => pad.buttons[button]?.pressed === true);
@@ -205,6 +278,12 @@ export class InputManager {
   }
 
   private handlePointerDown(pointer: Phaser.Input.Pointer): void {
+    if (this.pointerOptions && !this.pointerOptions.contains(pointer.x, pointer.y)) return;
+    if (!pointer.wasTouch && this.pointerOptions) {
+      this.mousePointer = pointer;
+      this.updateMouse();
+      return;
+    }
     this.touches.set(pointer.id, {
       originX: pointer.x,
       originY: pointer.y,
@@ -215,7 +294,10 @@ export class InputManager {
     if (this.primaryTouch === null) {
       this.primaryTouch = pointer.id;
       this.primaryMoved = false;
+    } else {
+      this.primaryMoved = true;
     }
+    this.updateGesture();
   }
 
   private handlePointerMove(pointer: Phaser.Input.Pointer): void {
@@ -224,6 +306,7 @@ export class InputManager {
 
     touch.x = pointer.x;
     touch.y = pointer.y;
+    this.updateGesture();
 
     if (pointer.id === this.primaryTouch && !this.primaryMoved) {
       const travelled = Math.abs(pointer.x - touch.originX) + Math.abs(pointer.y - touch.originY);
@@ -232,7 +315,25 @@ export class InputManager {
   }
 
   private handlePointerUp(pointer: Phaser.Input.Pointer): void {
+    if (this.mousePointer?.id === pointer.id) {
+      if (pointer.isDown) {
+        this.updateMouse();
+        return;
+      }
+      this.pointerBuffer.release('mouse');
+      this.mousePointer = null;
+      return;
+    }
+    if (!this.touches.has(pointer.id)) return;
     this.touches.delete(pointer.id);
+    this.pointerBuffer.release('gesture');
+    if (this.touches.size > 0) {
+      // Lifting a grab finger must not turn a held swipe into a dangerous step.
+      for (const touch of this.touches.values()) {
+        touch.originX = touch.x;
+        touch.originY = touch.y;
+      }
+    }
 
     if (pointer.id !== this.primaryTouch) return;
 

@@ -210,6 +210,156 @@ export function formatScore(score: number): string {
   return Math.max(0, Math.floor(score)).toString().padStart(6, '0');
 }
 
+/* ------------------------------------------------------------------ *
+ * Neighbour-aware terrain shading
+ * ------------------------------------------------------------------ */
+
+/**
+ * Which sides of a cell face open space.
+ *
+ * Terrain is drawn as a mass rather than as a grid of separate tiles, so the
+ * only edges that get a bevel are the ones a player has actually dug open.
+ * The bits are ordered clockwise from the top, which is also the order the
+ * edge sheet's frames are laid out in.
+ */
+export const EdgeBit = {
+  Up: 1,
+  Right: 2,
+  Down: 4,
+  Left: 8,
+} as const;
+
+/** Number of distinct open-side combinations; sizes the edge frame sheet. */
+export const EDGE_MASKS = 16;
+
+/**
+ * Pack four "is this side open?" answers into an edge mask.
+ *
+ * A closed side means the neighbouring cell is more of the same rock, so the
+ * two tiles should read as one continuous mass with no seam between them.
+ */
+export function edgeMask(up: boolean, right: boolean, down: boolean, left: boolean): number {
+  return (up ? EdgeBit.Up : 0) | (right ? EdgeBit.Right : 0) | (down ? EdgeBit.Down : 0)
+    | (left ? EdgeBit.Left : 0);
+}
+
+/**
+ * Position of the `index`th frame in a sheet `columns` frames wide.
+ *
+ * Every overlay lives in one texture so a screenful of carved edges costs a
+ * single draw batch rather than one texture swap per tile.
+ */
+export function sheetCell(index: number, columns: number): { col: number; row: number } {
+  const cols = Math.max(1, Math.trunc(columns));
+  const i = Math.max(0, Math.trunc(index));
+  return { col: i % cols, row: Math.floor(i / cols) };
+}
+
+/* ------------------------------------------------------------------ *
+ * Value noise
+ * ------------------------------------------------------------------ */
+
+/**
+ * A wrapped 2D value-noise sampler over a lattice of `cells` random corners
+ * spaced `grid` pixels apart.
+ *
+ * Used to give soil its clods: per-pixel randomness reads as television
+ * static, while smoothly interpolating a coarse lattice gives lumps of packed
+ * earth a few pixels across.
+ *
+ * Every lookup wraps in both axes, including negative coordinates. Sampling
+ * one cell up and to the left is how the slope, and therefore the shading, is
+ * worked out, so column zero always asks for cell -1: an unwrapped lookup
+ * reads past the start of the lattice, and the resulting `undefined` turns the
+ * pixel's colour into `NaN`, which paints as a dark seam down the edge of
+ * every tile.
+ */
+export function valueNoise(
+  cells: number,
+  grid: number,
+  corner: (index: number) => number,
+): (x: number, y: number) => number {
+  const size = Math.max(1, Math.trunc(cells));
+  const span = Math.max(1, grid);
+  const wrap2 = (v: number) => (((v % size) + size) % size);
+  const at = (cx: number, cy: number) => corner(wrap2(cy) * size + wrap2(cx));
+
+  return (x, y) => {
+    const gx = Math.floor(x / span);
+    const gy = Math.floor(y / span);
+    const tx = smoothstep(0, 1, (x - gx * span) / span);
+    const ty = smoothstep(0, 1, (y - gy * span) / span);
+    const top = lerp(at(gx, gy), at(gx + 1, gy), tx);
+    const bottom = lerp(at(gx, gy + 1), at(gx + 1, gy + 1), tx);
+    return lerp(top, bottom, ty);
+  };
+}
+
+/* ------------------------------------------------------------------ *
+ * The helmet lamp
+ * ------------------------------------------------------------------ */
+
+export interface LampCone {
+  /** Centre of the light, offset from the miner toward where they are looking. */
+  readonly x: number;
+  readonly y: number;
+  /** Radii in cells: the cone is wider along the direction of travel. */
+  readonly radiusX: number;
+  readonly radiusY: number;
+}
+
+/**
+ * Where the helmet lamp actually points.
+ *
+ * A miner's lamp is on their head, so the pool of light leads them rather than
+ * being centred on their boots. The cone is stretched along the direction they
+ * face and pushed forward by a fraction of its own radius, which is what makes
+ * turning around read as turning around instead of as a light flickering.
+ *
+ * `facing` is -1 or 1. The offset is deliberately smaller than the radius so
+ * the miner is never left standing outside their own light.
+ */
+export function lampCone(
+  x: number,
+  y: number,
+  facing: number,
+  radiusTiles: number,
+  tileSize: number,
+  stretch = 0.3,
+): LampCone {
+  const dir = facing < 0 ? -1 : 1;
+  const radiusX = radiusTiles * (1 + stretch);
+  return {
+    x: x + dir * radiusTiles * tileSize * stretch * 0.5,
+    y: y - tileSize * 0.15,
+    radiusX,
+    radiusY: radiusTiles,
+  };
+}
+
+/* ------------------------------------------------------------------ *
+ * Ambient drift
+ * ------------------------------------------------------------------ */
+
+/**
+ * Wrap a value into `[0, span)`, for motes that should reappear on the far
+ * side of the view rather than being respawned.
+ */
+export function wrap(value: number, span: number): number {
+  if (!(span > 0)) return 0;
+  const wrapped = value % span;
+  return wrapped < 0 ? wrapped + span : wrapped;
+}
+
+/**
+ * A slow, non-repeating-looking drift built from two incommensurate sines.
+ * Used for cave dust and for the idle sway of the title art.
+ */
+export function drift(seedPhase: number, timeMs: number, amplitude: number): number {
+  const t = timeMs / 1000;
+  return (Math.sin(t * 0.37 + seedPhase) * 0.65 + Math.sin(t * 0.91 + seedPhase * 2.3) * 0.35) * amplitude;
+}
+
 /**
  * How much to scale the glow texture so a light of `radiusTiles` covers that
  * radius on screen, and how far its edge reaches from the centre in pixels.

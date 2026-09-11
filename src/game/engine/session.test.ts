@@ -266,6 +266,33 @@ describe('the fixed-step clock', () => {
     expect(result.ticks).toBeLessThanOrEqual(4);
   });
 
+  it('consumes a buffered tap once, even when a frame catches up multiple scans', () => {
+    const run = session([spec({ map: ['WWWWWWWWW', 'WP.....EW', 'WWWWWWWWW'] })]);
+    hatch(run);
+    let pending = true;
+    let samples = 0;
+    const result = run.update(run.tickMs * 3.1, () => {
+      samples += 1;
+      const command = { dir: pending ? Dir.Right : null, grab: false };
+      pending = false;
+      return command;
+    });
+
+    expect(result.ticks).toBe(3);
+    expect(samples).toBe(3);
+    expect(run.simulation.runtime.playerX).toBe(2);
+  });
+
+  it('does not consume input before the next scan', () => {
+    const run = session();
+    let samples = 0;
+    run.update(run.tickMs / 2, () => {
+      samples += 1;
+      return NO_INPUT;
+    });
+    expect(samples).toBe(0);
+  });
+
   it('stops scanning once the cave is no longer running', () => {
     const run = session();
     run.simulation.runtime.outcome = CaveOutcome.Died;

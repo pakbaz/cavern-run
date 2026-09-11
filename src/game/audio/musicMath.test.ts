@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import { TIME_CRITICAL_SECONDS, TIME_PRESSURE_SECONDS } from '../../config';
-import { CAVE_COUNT } from '../levels/index';
+import { CAVES, CAVE_COUNT } from '../levels/index';
 import {
   MODES,
+  CAVE_LEITMOTIF,
   STEPS_PER_BAR,
   THEMES,
   THREAT_RANGE,
@@ -18,7 +19,9 @@ import {
   keyForCave,
   keyShift,
   layerGains,
+  leadAccent,
   leadDegree,
+  leadLength,
   leadPlays,
   loopSteps,
   midiToFreq,
@@ -93,6 +96,36 @@ describe('cave themes', () => {
   it('has one theme per cave in the campaign', () => {
     expect(THEMES.length).toBe(CAVE_COUNT);
     expect(new Set(THEMES.map((theme) => theme.id)).size).toBe(THEMES.length);
+    expect(THEMES.map((theme) => theme.name)).toEqual(CAVES.map((cave) => cave.name));
+  });
+
+  it('replaces every legacy melody with newly composed material', () => {
+    const legacyMotifs = new Set([
+      '0,2,4,2,1',
+      '0,1,2,4,2,0',
+      '0,3,2,4,5,4',
+      '0,2,1,0,4',
+      '0,4,3,2,4,6',
+      '0,-1,2,1,4',
+      '0,2,5,4,2,1',
+      '0,4,6,4,2',
+      '0,1,0,2,-1',
+      '0,2,4,5,4,2',
+      '0,1,4,3,1',
+      '0,3,2,5,3',
+      '0,-1,1,3,1',
+      '0,2,4,2,6,4',
+      '0,1,3,4,3,1',
+      '0,2,3,2,5',
+      '0,4,3,6,4,2',
+      '0,1,0,-1,1',
+      '6,4,2,0,-1,1',
+      '0,4,6,4,1,0',
+    ]);
+
+    for (const theme of THEMES) {
+      expect(legacyMotifs.has(theme.motif.join())).toBe(false);
+    }
   });
 
   it('gives every cave a musically different piece', () => {
@@ -100,6 +133,8 @@ describe('cave themes', () => {
       [theme.mode, theme.progression.join(), theme.motif.join(), theme.rhythm.join()].join('|'),
     );
     expect(new Set(signatures).size).toBe(THEMES.length);
+    expect(new Set(THEMES.map((theme) => theme.motif.join())).size).toBe(THEMES.length);
+    expect(new Set(THEMES.map((theme) => theme.rhythm.join())).size).toBe(THEMES.length);
 
     // Neighbouring caves should not even share a groove.
     for (let i = 1; i < THEMES.length; i += 1) {
@@ -113,16 +148,31 @@ describe('cave themes', () => {
     }
   });
 
+  it('shares one short cave cadence without reusing the level melodies', () => {
+    for (const theme of THEMES) {
+      const finalBar = (theme.progression.length - 1) * STEPS_PER_BAR;
+      const cadenceBeats = theme.rhythm.slice(-CAVE_LEITMOTIF.length);
+      const chord = chordDegree(finalBar, theme, 0);
+      const contour = cadenceBeats.map(
+        (beat) => leadDegree(finalBar + beat, theme, 0) - chord - 10,
+      );
+      expect(contour).toEqual(CAVE_LEITMOTIF);
+    }
+  });
+
   it('keeps every theme playable', () => {
     for (const theme of THEMES) {
       expect(theme.progression.length).toBeGreaterThanOrEqual(2);
       expect(theme.motif.length).toBeGreaterThanOrEqual(3);
       expect(theme.rhythm.length).toBeGreaterThanOrEqual(3);
+      expect(theme.motif.length).toBe(theme.rhythm.length);
+      expect(theme.motif[0]).toBe(0);
+      expect(theme.motif[theme.motif.length - 1]).toBe(0);
       expect(theme.kicks).toContain(0);
       expect(theme.swing).toBeGreaterThanOrEqual(0);
       expect(theme.swing).toBeLessThanOrEqual(0.4);
       expect(theme.baseTempo).toBeGreaterThan(60);
-      expect(theme.baseTempo + theme.tempoSpan).toBeLessThan(200);
+      expect(theme.baseTempo + theme.tempoSpan).toBeLessThanOrEqual(145);
       expect(Math.abs(theme.rootOffset)).toBeLessThanOrEqual(1);
 
       for (const beat of [...theme.rhythm, ...theme.kicks, ...theme.snares]) {
@@ -190,11 +240,11 @@ describe('the arc of a cave', () => {
     expect(tensionOf(-5, 150)).toBe(1);
   });
 
-  it('only winches the key up for the endgame', () => {
+  it('keeps the key stable instead of using an intrusive endgame lift', () => {
     expect(keyShift(0)).toBe(0);
     expect(keyShift(1)).toBe(0);
     expect(keyShift(2)).toBe(0);
-    expect(keyShift(3)).toBe(1);
+    expect(keyShift(3)).toBe(0);
   });
 });
 
@@ -235,12 +285,12 @@ describe('intensity', () => {
     expect(full).toBeLessThan(empty);
   });
 
-  it('slams a floor under the last thirty and last ten seconds', () => {
+  it('adds restrained pressure floors in the last thirty and ten seconds', () => {
     expect(intensityOf({ ...calm, secondsLeft: TIME_PRESSURE_SECONDS })).toBeGreaterThanOrEqual(
-      0.62,
+      0.5,
     );
     expect(intensityOf({ ...calm, secondsLeft: TIME_CRITICAL_SECONDS })).toBeGreaterThanOrEqual(
-      0.85,
+      0.68,
     );
   });
 
@@ -280,7 +330,8 @@ describe('tempo and timing', () => {
 
   it('opens the filter as things get frantic', () => {
     expect(filterCutoff(1, 0)).toBeGreaterThan(filterCutoff(0, 0));
-    expect(filterCutoff(0.5, 3)).toBeGreaterThan(filterCutoff(0.5, 0));
+    expect(filterCutoff(0.5, 3)).toBe(filterCutoff(0.5, 0));
+    expect(filterCutoff(1, 3)).toBeLessThanOrEqual(2500);
     expect(filterCutoff(0, 0)).toBeGreaterThan(0);
   });
 });
@@ -311,24 +362,20 @@ describe('layers', () => {
     }
   });
 
-  it('adds a layer with every movement', () => {
+  it('does not pile counter-melodies or alarm layers onto later movements', () => {
     const at = (phase: Phase) => layerGains(0.8, 100, phase);
 
-    expect(at(0).arp).toBe(0);
-    expect(at(1).arp).toBeGreaterThan(0);
-    expect(at(2).arp).toBeGreaterThan(at(1).arp);
-
-    expect(at(1).riser).toBe(0);
-    expect(at(2).riser).toBeGreaterThan(0);
-    expect(at(3).riser).toBeGreaterThan(at(2).riser);
-
-    expect(at(1).drone).toBe(0);
-    expect(at(3).drone).toBeGreaterThan(at(2).drone);
+    for (const phase of phases) {
+      expect(at(phase).arp).toBe(0);
+      expect(at(phase).riser).toBe(0);
+      expect(at(phase).drone).toBe(0);
+      expect(at(phase).ticker).toBe(0);
+    }
   });
 
-  it('only starts the ticker in the final seconds', () => {
+  it('keeps the countdown ticker out of the score', () => {
     expect(layerGains(0.9, TIME_CRITICAL_SECONDS + 1, 3).ticker).toBe(0);
-    expect(layerGains(0.9, TIME_CRITICAL_SECONDS, 3).ticker).toBe(1);
+    expect(layerGains(0.9, TIME_CRITICAL_SECONDS, 3).ticker).toBe(0);
   });
 
   it('raises the ticker pitch as the clock empties', () => {
@@ -344,12 +391,11 @@ describe('harmony', () => {
     expect(chordDegree(loopSteps(themeA), themeA, 0)).toBe(themeA.progression[0]);
   });
 
-  it('refuses to resolve the last bar once the cave gets serious', () => {
+  it('keeps the authored progression stable as pressure rises', () => {
     const lastBar = loopSteps(themeA) - STEPS_PER_BAR;
     expect(chordDegree(lastBar, themeA, 1)).toBe(themeA.progression[3]);
-    expect(chordDegree(lastBar, themeA, 2)).toBe(themeA.tensionChords[0]);
-    expect(chordDegree(lastBar, themeA, 3)).toBe(themeA.tensionChords[1]);
-    // Only the turnaround changes; the rest of the tune stays put.
+    expect(chordDegree(lastBar, themeA, 2)).toBe(themeA.progression[3]);
+    expect(chordDegree(lastBar, themeA, 3)).toBe(themeA.progression[3]);
     expect(chordDegree(0, themeA, 3)).toBe(themeA.progression[0]);
   });
 
@@ -359,14 +405,10 @@ describe('harmony', () => {
     expect(bar[0]).toBe(themeA.progression[0] + themeA.bassShape[0]);
   });
 
-  it('hammers the root in the endgame instead of arpeggiating', () => {
-    const bar = Array.from({ length: STEPS_PER_BAR }, (_, i) => bassDegree(i, themeA, 3));
-    const root = themeA.progression[0];
-    expect(bar.filter((degree) => degree === root).length).toBeGreaterThan(
-      Array.from({ length: STEPS_PER_BAR }, (_, i) => bassDegree(i, themeA, 0)).filter(
-        (degree) => degree === root,
-      ).length,
-    );
+  it('keeps the supporting bass pattern stable in the endgame', () => {
+    const calmBass = Array.from({ length: STEPS_PER_BAR }, (_, i) => bassDegree(i, themeA, 0));
+    const lateBass = Array.from({ length: STEPS_PER_BAR }, (_, i) => bassDegree(i, themeA, 3));
+    expect(lateBass).toEqual(calmBass);
   });
 });
 
@@ -397,8 +439,8 @@ describe('melody', () => {
     expect(new Set(line).size).toBeGreaterThan(3);
   });
 
-  it('lifts the melody an octave for the endgame', () => {
-    expect(leadDegree(0, themeA, 3)).toBeGreaterThan(leadDegree(0, themeA, 0));
+  it('keeps the foreground melody in its comfortable register', () => {
+    expect(leadDegree(0, themeA, 3)).toBe(leadDegree(0, themeA, 0));
   });
 
   it('plays more often as intensity rises', () => {
@@ -414,20 +456,41 @@ describe('melody', () => {
 
   it('lands the melody on the beats its theme asks for', () => {
     for (const theme of THEMES) {
-      for (const beat of theme.rhythm) expect(leadPlays(beat, 0.6, theme)).toBe(true);
+      for (const beat of theme.rhythm) expect(leadPlays(beat, 0.8, theme)).toBe(true);
     }
+  });
+
+  it('leaves breathing room in the inverted third bar until pressure is high', () => {
+    const middleNotes = themeA.rhythm
+      .slice(1, -1)
+      .map((beat) => 2 * STEPS_PER_BAR + beat);
+
+    expect(middleNotes.some((step) => leadPlays(step, 0.5, themeA))).toBe(false);
+    expect(middleNotes.some((step) => leadPlays(step, 0.8, themeA))).toBe(true);
+    expect(middleNotes.every((step) => leadPlays(step, 0.8, themeA))).toBe(false);
+  });
+
+  it('shapes phrase openings and endings instead of machine-gunning equal notes', () => {
+    const first = themeA.rhythm[0];
+    const middle = themeA.rhythm[1];
+    const last = themeA.rhythm[themeA.rhythm.length - 1];
+
+    expect(leadAccent(first, themeA)).toBeGreaterThan(leadAccent(middle, themeA));
+    expect(leadLength(last, themeA)).toBeGreaterThan(leadLength(middle, themeA));
   });
 });
 
 describe('counter-line and drums', () => {
-  it('holds the arpeggio back until the cave has warmed up', () => {
+  it('keeps the counter-line disabled so it never competes with the lead', () => {
     const count = (phase: Phase) =>
       Array.from({ length: STEPS_PER_BAR }, (_, i) => arpPlays(i, phase)).filter(Boolean).length;
 
-    expect(count(0)).toBe(0);
-    expect(count(1)).toBeGreaterThan(0);
-    expect(count(2)).toBeGreaterThan(count(1));
-    expect(count(3)).toBeGreaterThan(count(2));
+    for (const phase of phases) expect(count(phase)).toBe(0);
+    for (const theme of THEMES) {
+      for (let step = 0; step < loopSteps(theme); step += 1) {
+        if (leadPlays(step, 1, theme)) expect(arpPlays(step, 3)).toBe(false);
+      }
+    }
   });
 
   it('keeps the counter-line on the chord under it', () => {
@@ -448,19 +511,11 @@ describe('counter-line and drums', () => {
     expect(hats(0.9)).toBeGreaterThan(hats(0.4));
   });
 
-  it('rolls a fill into the top of the loop once time is short', () => {
+  it('does not add frantic snare fills when time is short', () => {
     const fills = (phase: Phase) =>
       Array.from({ length: loopSteps(themeA) }, (_, i) => drumsAt(i, 0.6, themeA, phase).fill)
         .filter(Boolean).length;
 
-    expect(fills(0)).toBe(0);
-    expect(fills(1)).toBe(0);
-    expect(fills(2)).toBeGreaterThan(0);
-    expect(fills(3)).toBeGreaterThan(fills(2));
-
-    // Fills belong at the very end of the loop, not scattered through it.
-    const last = loopSteps(themeA) - 1;
-    expect(drumsAt(last, 0.6, themeA, 3).fill).toBe(true);
-    expect(drumsAt(0, 0.6, themeA, 3).fill).toBe(false);
+    for (const phase of phases) expect(fills(phase)).toBe(0);
   });
 });
