@@ -213,15 +213,18 @@ the square cave cells.
 ### The soundtrack
 
 All twenty legacy melodies have been replaced by new original compositions.
-Each cave has its own motif, rhythm, chord progression and bass pulse, named
+Each cave has its own motif, melodic rhythm and chord progression, named
 for its stage and shaped around its puzzle. A shared three-note cadence and
 subterranean instrument palette keep the campaign musically connected.
 
 The arrangement develops with the clock and nearby danger. Intensity changes
 smoothly, and larger arrangement changes wait for a bar boundary. One clear
-foreground melody sits over quiet pads, bass and restrained percussion.
+foreground melody is audible from the first bar, using the full phrase that
+previously arrived near the end. Quiet sustained chords sit underneath it;
+the pulsing bass, drums, hi-hats and continuous air hiss are removed entirely.
 There is no competing counter-melody, melodic echo, panic drone or countdown
-ticker. Tempo changes remain small so danger does not overwhelm the tune.
+ticker. A small late-stage lift in expression and brightness preserves the
+music's sense of progress without restoring the old backing track.
 
 Stereo placement, a synthetic cave reverb and a mix compressor give the sounds
 depth while keeping the melody and gameplay cues clear. Short, bounded

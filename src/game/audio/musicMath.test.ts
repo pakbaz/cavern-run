@@ -328,7 +328,7 @@ describe('tempo and timing', () => {
     expect(swingOffset(1, themeA, 0.12)).toBeLessThan(0.12);
   });
 
-  it('opens the filter as things get frantic', () => {
+  it('keeps the melody clear with a gentle late-stage brightness lift', () => {
     expect(filterCutoff(1, 0)).toBeGreaterThan(filterCutoff(0, 0));
     expect(filterCutoff(0.5, 3)).toBe(filterCutoff(0.5, 0));
     expect(filterCutoff(1, 3)).toBeLessThanOrEqual(2500);
@@ -337,15 +337,29 @@ describe('tempo and timing', () => {
 });
 
 describe('layers', () => {
-  it('thins the pad and brings in drums as intensity climbs', () => {
+  it('brings the stage melody forward immediately without rhythmic backing', () => {
+    for (const phase of phases) {
+      for (const intensity of [0, 0.1, 0.5, 1]) {
+        const gains = layerGains(intensity, 10, phase);
+        expect(gains.lead).toBeGreaterThanOrEqual(0.65);
+        expect(gains.lead).toBeGreaterThanOrEqual(gains.pad * 3);
+        expect(gains.bass).toBe(0);
+        expect(gains.drums).toBe(0);
+        expect(gains.hats).toBe(0);
+      }
+    }
+  });
+
+  it('keeps accompaniment quieter as the melody grows toward the end', () => {
     const quiet = layerGains(0, 150, 0);
     const loud = layerGains(1, 150, 3);
 
     expect(quiet.pad).toBeGreaterThan(loud.pad);
     // The pad never disappears: it is what holds the harmony together.
     expect(loud.pad).toBeGreaterThan(0);
-    expect(loud.drums).toBeGreaterThan(quiet.drums);
-    expect(loud.bass).toBeGreaterThan(quiet.bass);
+    expect(loud.lead).toBeGreaterThan(quiet.lead);
+    expect(loud.drums).toBe(0);
+    expect(loud.bass).toBe(0);
     expect(quiet.drums).toBe(0);
     expect(quiet.hats).toBe(0);
   });
@@ -413,6 +427,16 @@ describe('harmony', () => {
 });
 
 describe('melody', () => {
+  it('plays the full late-stage motif from the beginning of every cave', () => {
+    for (const theme of THEMES) {
+      const notes = (intensity: number) => Array.from({ length: loopSteps(theme) }, (_, step) => step)
+        .filter((step) => leadPlays(step, intensity, theme));
+      expect(notes(0), theme.name).toEqual(notes(0.9));
+      expect(notes(0).length, theme.name).toBeGreaterThanOrEqual(theme.motif.length * 3);
+      expect(filterCutoff(0, 0)).toBeGreaterThanOrEqual(1800);
+    }
+  });
+
   it('is repeatable and finite for every theme', () => {
     for (const theme of THEMES) {
       for (let step = 0; step < loopSteps(theme); step += 1) {
@@ -443,15 +467,15 @@ describe('melody', () => {
     expect(leadDegree(0, themeA, 3)).toBe(leadDegree(0, themeA, 0));
   });
 
-  it('plays more often as intensity rises', () => {
+  it('preserves the full melodic phrase regardless of time pressure', () => {
     const count = (intensity: number) =>
       Array.from({ length: loopSteps(themeA) }, (_, i) =>
         leadPlays(i, intensity, themeA),
       ).filter(Boolean).length;
 
-    expect(count(0.9)).toBeGreaterThan(count(0.5));
-    expect(count(0.5)).toBeGreaterThan(count(0.1));
-    expect(count(0.1)).toBeGreaterThan(0);
+    expect(count(0.9)).toBe(count(0.5));
+    expect(count(0.5)).toBe(count(0.1));
+    expect(count(0.1)).toBeGreaterThanOrEqual(themeA.motif.length * 3);
   });
 
   it('lands the melody on the beats its theme asks for', () => {
@@ -460,12 +484,12 @@ describe('melody', () => {
     }
   });
 
-  it('leaves breathing room in the inverted third bar until pressure is high', () => {
+  it('keeps the late-stage third-bar response and rests throughout the cave', () => {
     const middleNotes = themeA.rhythm
       .slice(1, -1)
       .map((beat) => 2 * STEPS_PER_BAR + beat);
 
-    expect(middleNotes.some((step) => leadPlays(step, 0.5, themeA))).toBe(false);
+    expect(middleNotes.some((step) => leadPlays(step, 0.5, themeA))).toBe(true);
     expect(middleNotes.some((step) => leadPlays(step, 0.8, themeA))).toBe(true);
     expect(middleNotes.every((step) => leadPlays(step, 0.8, themeA))).toBe(false);
   });
@@ -498,17 +522,16 @@ describe('counter-line and drums', () => {
     expect(arpDegree(0, themeA, 3)).toBe(arpDegree(0, themeA, 0));
   });
 
-  it('lands each theme’s groove and gets busier when pushed', () => {
+  it('never restores the removed backing drums even under time pressure', () => {
     for (const theme of THEMES) {
-      for (const beat of theme.kicks) expect(drumsAt(beat, 0.5, theme, 0).kick).toBe(true);
-      for (const beat of theme.snares) expect(drumsAt(beat, 0.5, theme, 0).snare).toBe(true);
+      for (const phase of phases) {
+        for (let beat = 0; beat < STEPS_PER_BAR; beat += 1) {
+          expect(drumsAt(beat, 1, theme, phase)).toEqual({
+            kick: false, snare: false, hat: false, fill: false,
+          });
+        }
+      }
     }
-
-    const hats = (intensity: number) =>
-      Array.from({ length: STEPS_PER_BAR }, (_, i) => drumsAt(i, intensity, themeA, 0).hat).filter(
-        Boolean,
-      ).length;
-    expect(hats(0.9)).toBeGreaterThan(hats(0.4));
   });
 
   it('does not add frantic snare fills when time is short', () => {
