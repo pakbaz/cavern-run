@@ -4,6 +4,7 @@ import { layout } from '../../layout';
 
 import { SceneKey } from '../../config';
 import { audio } from '../audio/index';
+import { stageLabel } from '../levels/caveFormat';
 import {
   loadHighScores,
   normalizeInitials,
@@ -64,7 +65,7 @@ export class GameOverScene extends Phaser.Scene {
 
     centred(this, designY(142), won ? 'YOU ESCAPED' : 'GAME OVER', titleStyle(won ? 36 : 40));
     centred(this, designY(182), `SCORE  ${pad(session.score, 6)}`, bodyStyle(16, Ink.gold));
-    centred(this, designY(206), `REACHED CAVE ${session.spec.letter}`, bodyStyle(13));
+    centred(this, designY(206), `REACHED ${stageLabel(session.spec)}`, bodyStyle(13));
 
     this.input.on(Phaser.Input.Events.POINTER_DOWN, this.onPointer, this);
 
@@ -107,7 +108,7 @@ export class GameOverScene extends Phaser.Scene {
         centred(
           this,
           designY(254 + index * 16),
-          `${index + 1}. ${row.name.padEnd(4)} ${pad(row.score, 6)}  CAVE ${row.caveLetter}`,
+          `${index + 1}. ${row.name.padEnd(4)} ${pad(row.score, 6)}  STAGE ${row.caveReached + 1}`,
           bodyStyle(11, Ink.body),
         );
       });

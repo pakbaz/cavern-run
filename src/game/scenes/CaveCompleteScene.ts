@@ -48,7 +48,7 @@ export class CaveCompleteScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor('#05070f');
     card(this, 100, 360, 190);
 
-    centred(this, designY(142), 'CAVE CLEAR', titleStyle(38));
+    centred(this, designY(142), 'STAGE CLEAR', titleStyle(38));
     centred(this, designY(180), `${result.diamonds} DIAMONDS  ${pad(result.caveScore, 5)}`, bodyStyle(13));
 
     // The tally starts from the pre-bonus score and climbs, so the number

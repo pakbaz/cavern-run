@@ -1,22 +1,13 @@
-import { DEFAULT_TUNING } from '../../engine/simTypes';
 import type { CaveSpec } from '../caveFormat';
+import { stageDefaults } from '../stageProfiles';
 
 /** A — Buried River. A broad mineral field broken by long, staggered rock shelves. */
 export const caveA: CaveSpec = {
-  ...DEFAULT_TUNING,
-  id: 'caveA',
-  letter: 'A',
-  name: 'Buried River',
+  ...stageDefaults(0),
   paletteId: 'glacier',
   hint: 'Pick twelve gems from the field. Dig beside loaded rocks, not underneath them.',
   objective: 'Cross the mineral-filled strata, collecting safe gems and reading the rockfalls.',
   mechanics: ['digging', 'gravity'],
-  difficulty: 1,
-  diamondsRequired: 12,
-  diamondValue: 10,
-  extraDiamondValue: 25,
-  timeLimit: 75,
-  tickHz: 6.5,
   map: [
     'WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW',
     'W......rdr..r........rr......  .... ...W',

@@ -50,7 +50,7 @@ const TILE_CHARS: Readonly<Record<number, string>> = {
 /** A complete cave: layout plus the tuning the simulation runs it with. */
 export interface CaveSpec extends CaveTuning {
   readonly id: string;
-  /** Display letter, A through T. */
+  /** Stable storage key, A through T; displayLabel identifies caves and intermissions. */
   readonly letter: string;
   readonly name: string;
   /** Key into `PALETTES`. */
@@ -65,6 +65,8 @@ export interface CaveSpec extends CaveTuning {
   readonly mechanics: readonly CaveMechanic[];
   /** Campaign challenge tier, from introductory (1) through finale (5). */
   readonly difficulty: 1 | 2 | 3 | 4 | 5;
+  readonly stageKind?: 'cave' | 'intermission';
+  readonly displayLabel?: string;
 }
 
 export type CaveMechanic =
@@ -77,6 +79,11 @@ export type CaveMechanic =
   | 'amoeba'
   | 'expanding-wall'
   | 'slime';
+
+export function stageLabel(spec: Pick<CaveSpec, 'letter' | 'displayLabel'>, compact = false): string {
+  const label = spec.displayLabel ?? `CAVE ${spec.letter}`;
+  return compact ? label.replace('INTERMISSION ', 'I-').replace('CAVE ', '') : label;
+}
 
 export interface ParsedMap {
   readonly width: number;

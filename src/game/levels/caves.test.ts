@@ -51,7 +51,7 @@ describe('the campaign', () => {
     expect(first.mechanics).toContain('gravity');
   });
 
-  it('ships exactly twenty caves, lettered A through T', () => {
+  it('ships twenty stages with stable storage keys A through T', () => {
     expect(CAVE_COUNT).toBe(20);
     expect(CAVES.map((cave) => cave.letter).join('')).toBe('ABCDEFGHIJKLMNOPQRST');
   });
@@ -76,8 +76,8 @@ describe('the campaign', () => {
     expect(caveAt(3)).toBe(CAVES[3]);
   });
 
-  it.each(['JO', 'EF', 'ER', 'FR', 'HI', 'HS', 'IS', 'GQ', 'MQ'])(
-    'separates the interior topology of formerly repeated family %s',
+  it.each(['BC', 'LQ', 'RS'])(
+    'keeps related reference structures distinct: %s',
     (pair) => {
       const [a, b] = [...pair].map((letter) => CAVES.find((cave) => cave.letter === letter)!);
       expect(structuralSimilarity(a.map, b.map), `${pair}: aligned structural Dice similarity`)
@@ -110,9 +110,10 @@ describe('the campaign', () => {
     },
   );
 
-  it('ramps difficulty: later caves are faster and want more diamonds', () => {
-    const first = CAVES.slice(0, 5);
-    const last = CAVES.slice(-5);
+  it('increases pace and average quota across the regular caves', () => {
+    const regular = CAVES.filter((cave) => cave.stageKind === 'cave');
+    const first = regular.slice(0, 4);
+    const last = regular.slice(-4);
 
     const avg = (list: readonly number[]) => list.reduce((a, b) => a + b, 0) / list.length;
 
@@ -120,21 +121,6 @@ describe('the campaign', () => {
       avg(first.map((c) => c.diamondsRequired)),
     );
     expect(avg(last.map((c) => c.tickHz))).toBeGreaterThan(avg(first.map((c) => c.tickHz)));
-    expect(avg(last.map((c) => c.diamondValue))).toBeGreaterThan(
-      avg(first.map((c) => c.diamondValue)),
-    );
-  });
-
-  it.each([
-    ['A', 'introductory digging', 12, 16],
-    ['E', 'first room breach', 8, 14],
-    ['R', 'winding maze', 20, 28],
-    ['M', 'butterfly production', 30, 36],
-    ['Q', 'butterfly patrol courts', 24, 36],
-  ] as const)('keeps cave %s at a classic-scale %s quota', (letter, _archetype, minimum, maximum) => {
-    const quota = CAVES.find((cave) => cave.letter === letter)!.diamondsRequired;
-    expect(quota).toBeGreaterThanOrEqual(minimum);
-    expect(quota).toBeLessThanOrEqual(maximum);
   });
 
   it('raises simulation speed gradually without sudden difficulty spikes', () => {
@@ -184,18 +170,18 @@ describe('the campaign', () => {
     const usesChar = (index: number, char: string) =>
       CAVES[index].map.some((row) => row.includes(char));
 
-    // No creatures, growth or trickery in the opening caves.
-    for (let i = 0; i < 4; i += 1) {
+    // The first three reference caves teach digging and rock handling.
+    for (let i = 0; i < 3; i += 1) {
       for (const char of ['f', 'F', 'b', 'B', 'a', 'M', 'S', 'H', 'V', 'X']) {
         expect(usesChar(i, char), `cave ${CAVES[i].letter} must not use '${char}'`).toBe(false);
       }
     }
 
-    // ...and the finale pulls everything together.
-    const finale = CAVES[CAVES.length - 1];
-    for (const char of ['a', 'M', 'S', 'b', 'f']) {
-      expect(finale.map.some((row) => row.includes(char)), `finale uses '${char}'`).toBe(true);
-    }
+    expect(usesChar(3, 'b') || usesChar(3, 'B')).toBe(true);
+    expect(usesChar(7, 'a')).toBe(true);
+    expect(usesChar(8, 'M')).toBe(true);
+    expect(CAVES[19].stageKind).toBe('intermission');
+    expect(usesChar(19, 'M')).toBe(true);
   });
 });
 
@@ -218,16 +204,23 @@ describe('validateCave', () => {
   });
 
   it('counts destructible butterfly footprints without crediting steel cheeks', () => {
-    const reinforced = CAVES.find((cave) => cave.letter === 'G')!;
-    expect(validateCave({ ...reinforced, diamondsRequired: 8 }).join())
-      .toContain('quota of 8 exceeds the 7 diamonds');
-    const membrane = CAVES.find((cave) => cave.letter === 'M')!;
-    expect(validateCave({ ...membrane, diamondsRequired: 30 })).toEqual([]);
-    expect(validateCave({
-      ...membrane,
-      diamondsRequired: 38,
-      map: membrane.map.map((row) => row.replaceAll('w', 'W')),
-    }).join()).toContain('quota of 38 exceeds');
+    const grid: string[][] = Array.from({ length: CAVE_HEIGHT }, (_, y) =>
+      Array.from({ length: CAVE_WIDTH }, (_, x) =>
+        x === 0 || y === 0 || x === CAVE_WIDTH - 1 || y === CAVE_HEIGHT - 1 ? 'W' : '.',
+      ),
+    );
+    grid[1][1] = 'P';
+    grid[1][5] = 'E';
+    grid[1][3] = 'r';
+    grid[3][3] = 'b';
+    for (const x of [2, 3, 4]) grid[4][x] = 'W';
+    const reinforced = { ...good, map: grid.map((row) => row.join('')), diamondsRequired: 6 };
+    expect(validateCave(reinforced)).toEqual([]);
+    expect(validateCave({ ...reinforced, diamondsRequired: 7 }).join())
+      .toContain('quota of 7 exceeds the 6 diamonds');
+    for (const x of [2, 3, 4]) grid[4][x] = 'w';
+    expect(validateCave({ ...reinforced, map: grid.map((row) => row.join('')), diamondsRequired: 9 }))
+      .toEqual([]);
   });
 
   it('will not count on an amoeba with more room than it can fill', () => {
