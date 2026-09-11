@@ -34,6 +34,7 @@ import {
   isCreature,
   isDiamond,
   isFallable,
+  isFalling,
   isRounded,
   type Direction,
   type TileId,
@@ -144,8 +145,29 @@ function dangerMap(sim: Sim): Uint8Array {
     for (let x = 0; x < width; x += 1) {
       const tile = cave.get(x, y);
 
+      // A live conversion outlet must stay clear: standing in it consumes
+      // the incoming stone without producing a diamond. Unlike an ordinary
+      // rockfall, this arrival crosses a solid tile and has no visible shaft.
+      if (tile === Tile.MagicWall) {
+        for (let above = y - 1; above >= 0; above -= 1) {
+          const feed = cave.get(x, above);
+          if (feed === Tile.Empty || feed === Tile.Slime) continue;
+          if (isFallable(feed)) {
+            danger[(y + 1) * width + x] |= FALL;
+            markShaft(sim, danger, x, y, FALL);
+          }
+          break;
+        }
+      }
+
       if (isFallable(tile)) {
         const below = cave.get(x, y + 1);
+        // Collecting a diamond in a descending stack removes its support
+        // before gravity runs. Grab it sideways rather than replacing it
+        // with the miner directly beneath the next falling diamond.
+        if (isFalling(tile) && isGrabbable(below)) {
+          danger[(y + 1) * width + x] |= FALL;
+        }
         if (below === Tile.Empty) {
           markShaft(sim, danger, x, y, FALL);
         } else if (isRounded(below)) {
@@ -389,6 +411,76 @@ function adjacentProductionSupport(sim: Sim, x: number, y: number): Direction | 
   return null;
 }
 
+/** An open patrol court reached by a rock's roof hatch, not a boxed charge. */
+function patrolCourt(sim: Sim, x: number, y: number): Set<number> | null {
+  if (sim.cave.get(x, y) !== Tile.Empty) return null;
+  const { cave } = sim;
+  const seen = new Set<number>();
+  const pending = [y * cave.width + x];
+  let hasCreature = false;
+  while (pending.length > 0) {
+    const cell = pending.pop()!;
+    if (seen.has(cell)) continue;
+    const cx = cell % cave.width;
+    const cy = Math.floor(cell / cave.width);
+    const tile = cave.get(cx, cy);
+    if (tile !== Tile.Empty && !isCreature(tile)) continue;
+    seen.add(cell);
+    hasCreature ||= isCreature(tile);
+    for (const { dx, dy } of STEPS) {
+      if (cave.inBounds(cx + dx, cy + dy)) pending.push((cy + dy) * cave.width + cx + dx);
+    }
+  }
+  const columns = new Set([...seen].map((cell) => cell % cave.width));
+  return hasCreature && columns.size >= 3 ? seen : null;
+}
+
+/**
+ * Moving enemies need a timed release, not the boxed-charge reflex. Forecast
+ * a grab and retreat by replaying only real inputs into a fresh public session;
+ * never copy or alter simulation state. Waiting here tracks the patrol, not
+ * an arbitrary route-duration target.
+ */
+function timePatrolDrop(
+  run: CaveSession,
+  inputs: readonly PlayerInput[],
+  observedPatrols: Set<string>,
+): PlayerInput | null {
+  const sim = run.simulation;
+  for (const dir of [Dir.Left, Dir.Right] as const) {
+    const dx = dir === Dir.Left ? -1 : 1;
+    const x = sim.runtime.playerX + dx;
+    const y = sim.runtime.playerY;
+    if (!isLoadedDirt(sim, sim.cave.get(x, y), x, y)) continue;
+    const court = patrolCourt(sim, x, y + 1);
+    if (court === null) continue;
+    const phase = `${sim.runtime.playerX},${sim.runtime.playerY}/${x},${y}:` +
+      [...court].sort((a, b) => a - b)
+        .map((cell) => `${cell}:${sim.cave.tiles[cell]}:${sim.cave.stage[cell]}`).join(',');
+    // A repeated patrol state offers no new shot. Fall back to ordinary
+    // rock handling instead of waiting until the cave timer expires.
+    if (observedPatrols.has(phase)) return null;
+    observedPatrols.add(phase);
+
+    const forecast = new CaveSession([run.spec]);
+    for (const previous of inputs) forecast.update(forecast.tickMs, previous);
+    let hit = false;
+    for (let tick = 0; tick < sim.cave.height; tick += 1) {
+      const input: PlayerInput = tick === 0 ? { dir, grab: true }
+        : tick === 1 ? { dir: dir === Dir.Left ? Dir.Right : Dir.Left, grab: false }
+        : { dir: null, grab: false };
+      const events = forecast.update(forecast.tickMs, input).events;
+      if (events.some((event) => event.type === 'playerDied')) break;
+      if (events.some((event) => event.type === 'explode' && court.has(event.y * sim.cave.width + event.x))) {
+        hit = true;
+        break;
+      }
+    }
+    return hit ? { dir, grab: true } : { dir: null, grab: false };
+  }
+  return null;
+}
+
 /**
  * Reach the safe side of a loaded support, then pull it without stepping
  * underneath the falling object. This is deliberately separate from ordinary
@@ -607,13 +699,24 @@ export function playCave(run: CaveSession, maxTicks = 4000): BotRun {
   const inputs: PlayerInput[] = [];
   const eventTicks: Array<readonly [SimEvent, number]> = [];
   let ticks = 0;
+  let retreat: PlayerInput | null = null;
+  const observedPatrols = new Set<string>();
 
   while (ticks < maxTicks && run.outcome === CaveOutcome.Running) {
     let input: PlayerInput = { dir: null, grab: false };
 
     if (sim.runtime.playerBorn && sim.runtime.playerAlive) {
       trail.mark(sim.runtime.playerX + sim.runtime.playerY * sim.cave.width);
-      input = decide(sim, dangerMap(sim), trail, hasAmoebaObjective);
+      if (retreat !== null) {
+        input = retreat;
+        retreat = null;
+      } else {
+        const timed = timePatrolDrop(run, inputs, observedPatrols);
+        input = timed ?? decide(sim, dangerMap(sim), trail, hasAmoebaObjective);
+        if (timed?.grab && timed.dir !== null) {
+          retreat = { dir: timed.dir === Dir.Left ? Dir.Right : Dir.Left, grab: false };
+        }
+      }
     }
 
     inputs.push(input);

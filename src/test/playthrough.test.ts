@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { CaveSession } from '../game/engine/CaveSession';
 import { CaveOutcome } from '../game/engine/simTypes';
-import { Tile } from '../game/engine/tiles';
+import { DIR_DX, DIR_DY, Tile, isButterfly, isDiamond, isFalling } from '../game/engine/tiles';
 import { CAVES } from '../game/levels/index';
 import { canReach, playCave, replayCave, type BotRun } from './bot';
 
@@ -23,25 +23,25 @@ describe('playing the caves', () => {
   const expectedWitness: Readonly<
     Record<string, Readonly<{ ticks: number; secondsLeft: number }>>
   > = {
-    A: { ticks: 142, secondsLeft: 60 },
+    A: { ticks: 206, secondsLeft: 51 },
     B: { ticks: 98, secondsLeft: 43 },
     C: { ticks: 127, secondsLeft: 54 },
     D: { ticks: 201, secondsLeft: 59 },
     E: { ticks: 233, secondsLeft: 30 },
-    F: { ticks: 266, secondsLeft: 62 },
+    F: { ticks: 248, secondsLeft: 64 },
     G: { ticks: 125, secondsLeft: 30 },
     H: { ticks: 233, secondsLeft: 52 },
-    I: { ticks: 234, secondsLeft: 52 },
-    J: { ticks: 182, secondsLeft: 49 },
+    I: { ticks: 244, secondsLeft: 51 },
+    J: { ticks: 174, secondsLeft: 50 },
     K: { ticks: 194, secondsLeft: 43 },
     L: { ticks: 298, secondsLeft: 51 },
-    M: { ticks: 130, secondsLeft: 41 },
+    M: { ticks: 260, secondsLeft: 25 },
     N: { ticks: 261, secondsLeft: 19 },
-    O: { ticks: 252, secondsLeft: 52 },
+    O: { ticks: 238, secondsLeft: 54 },
     P: { ticks: 235, secondsLeft: 44 },
-    Q: { ticks: 215, secondsLeft: 42 },
-    R: { ticks: 278, secondsLeft: 36 },
-    S: { ticks: 244, secondsLeft: 30 },
+    Q: { ticks: 275, secondsLeft: 35 },
+    R: { ticks: 220, secondsLeft: 42 },
+    S: { ticks: 190, secondsLeft: 26 },
     T: { ticks: 638, secondsLeft: 63 },
   };
 
@@ -235,6 +235,152 @@ describe('playing the caves', () => {
     expect(result.timeBonus).toBeGreaterThan(0);
     expect(result.totalScore).toBe(result.caveScore + result.timeBonus);
     expect(run.score).toBe(result.totalScore);
+  });
+
+  it('advances a normally played campaign through every letter exactly once', () => {
+    const session = new CaveSession(CAVES);
+    const visited: string[] = [];
+    for (let index = 0; index < CAVES.length; index += 1) {
+      expect(session.caveIndex).toBe(index);
+      expect(session.spec).toBe(CAVES[index]);
+      visited.push(session.spec.letter);
+      expect(playCave(session).outcome).toBe(CaveOutcome.Complete);
+      expect(session.finishCave().caveIndex).toBe(index);
+      expect(session.advanceCave()).toBe(index < CAVES.length - 1);
+    }
+    expect(visited.join('')).toBe('ABCDEFGHIJKLMNOPQRST');
+    expect(session.spec.letter).toBe('T');
+  });
+
+  it.each(CAVES.filter((cave) => ['F', 'R'].includes(cave.letter)).flatMap((cave) =>
+    cave.map.flatMap((row, y) => [...row].flatMap((tile, x) =>
+      /[fF]/.test(tile) ? [[cave.letter, x, y, cave] as const] : [],
+    )),
+  ))('cave %s needs the individual demolition charge at %i,%i', (_letter, x, y, cave) => {
+    const disabled = {
+      ...cave,
+      map: cave.map.map((row, rowY) =>
+        rowY === y ? `${row.slice(0, x)}W${row.slice(x + 1)}` : row,
+      ),
+    };
+    expect(playCave(new CaveSession([disabled])).outcome).not.toBe(CaveOutcome.Complete);
+  });
+
+  it('relays I through three separated terraces on one charge', () => {
+    const cave = CAVES.find((spec) => spec.letter === 'I')!;
+    const result = playCave(new CaveSession([cave]));
+    const conversions = result.events.filter((event) => event.type === 'magicWallConvert');
+    const terraceRows = [...new Set(conversions.map((event) => event.y))].sort((a, b) => a - b);
+    expect(terraceRows).toHaveLength(3);
+    expect(terraceRows.map((y) => conversions.filter((event) => event.y === y).length))
+      .toEqual([4, 4, 4]);
+    const meanX = terraceRows.map((y) =>
+      conversions.filter((event) => event.y === y).reduce((sum, event) => sum + event.x, 0) / 4,
+    );
+    expect(meanX[1] - Math.max(meanX[0], meanX[2])).toBeGreaterThan(15);
+    expect(result.eventCounts.magicWallStart).toBe(1);
+    expect(result.eventCounts.magicWallStop).toBe(0);
+  });
+
+  it.each(CAVES.filter((cave) => ['M', 'Q'].includes(cave.letter)).flatMap((cave) =>
+    cave.map.flatMap((row, y) => [...row].flatMap((tile, x) =>
+      /[bB]/.test(tile) ? [[cave.letter, x, y, cave] as const] : [],
+    )),
+  ))('cave %s needs each butterfly yield, including %i,%i', (_letter, x, y, cave) => {
+    const disabled = {
+      ...cave,
+      map: cave.map.map((row, rowY) =>
+        rowY === y ? `${row.slice(0, x)}f${row.slice(x + 1)}` : row,
+      ),
+    };
+    expect(playCave(new CaveSession([disabled])).outcome).not.toBe(CaveOutcome.Complete);
+  });
+
+  it('makes all three Q butterflies patrol their courts before the first timed rockfall', () => {
+    const cave = CAVES.find((spec) => spec.letter === 'Q')!;
+    const result = playCave(new CaveSession([cave]));
+    const replay = new CaveSession([cave]);
+    const courts = [
+      { left: 4, top: 5, right: 13, bottom: 10 },
+      { left: 22, top: 3, right: 35, bottom: 7 },
+      { left: 16, top: 13, right: 24, bottom: 19 },
+    ];
+    const visited = courts.map(() => new Set<string>());
+    let patrolWaits = 0;
+    for (const input of result.inputs) {
+      if (replay.simulation.runtime.playerBorn && input.dir === null) patrolWaits += 1;
+      const update = replay.update(replay.tickMs, input);
+      for (const move of replay.simulation.cave.moves) {
+        if (!isButterfly(move.tile)) continue;
+        courts.forEach((court, index) => {
+          if (move.toX > court.left && move.toX < court.right &&
+              move.toY > court.top && move.toY < court.bottom) {
+            visited[index].add(`${move.toX},${move.toY}`);
+          }
+        });
+      }
+      if (update.events.some((event) => event.type === 'explode')) break;
+    }
+    for (const positions of visited) expect(positions.size).toBeGreaterThanOrEqual(8);
+    expect(patrolWaits).toBeGreaterThan(0);
+    expect(result.butterflyExplosions).toBe(3);
+  });
+
+  it.each([['J', 5, 10], ['O', 9, 13]] as const)(
+    'keeps %s plugged on permanent steel while its chambers crystallise',
+    (letter, x, y) => {
+      const cave = CAVES.find((spec) => spec.letter === letter)!;
+      const result = playCave(new CaveSession([cave]));
+      const replay = new CaveSession([cave]);
+      let pushes = 0;
+      let supportedScans = 0;
+      for (const input of result.inputs) {
+        const update = replay.update(replay.tickMs, input);
+        pushes += update.events.filter((event) => event.type === 'push').length;
+        if (pushes >= 2) {
+          expect(replay.simulation.cave.get(x, y)).toBe(Tile.Boulder);
+          expect(replay.simulation.cave.get(x, y + 1)).toBe(Tile.Steel);
+          if (!replay.simulation.runtime.amoebaResolved) supportedScans += 1;
+        }
+      }
+      expect(supportedScans).toBeGreaterThan(0);
+      if (letter === 'O') {
+        const crystals = result.events.filter((event) => event.type === 'diamond');
+        expect(crystals.some((event) => event.y === 4)).toBe(true);
+        expect(crystals.some((event) => event.y === 9)).toBe(true);
+      }
+      expect(result.eventTicks.explode![0]).toBeGreaterThan(result.amoebaDiamondResolutionTick!);
+    },
+  );
+
+  it('drains six stones per S silo without stepping beneath a descending stack', () => {
+    const cave = CAVES.find((spec) => spec.letter === 'S')!;
+    const result = playCave(new CaveSession([cave]));
+    for (const events of [
+      result.events.filter((event) => event.type === 'slime'),
+      result.events.filter((event) => event.type === 'magicWallConvert'),
+    ]) {
+      const columns = [...new Set(events.map((event) => event.x))];
+      expect(columns).toHaveLength(2);
+      expect(columns.map((x) => events.filter((event) => event.x === x).length)).toEqual([6, 6]);
+    }
+
+    const replay = new CaveSession([cave]);
+    let fallingStackAvoidances = 0;
+    for (const input of result.inputs) {
+      const { cave: grid, runtime } = replay.simulation;
+      for (const dir of [1, 3] as const) {
+        const x = runtime.playerX + DIR_DX[dir];
+        const y = runtime.playerY + DIR_DY[dir];
+        if (isDiamond(grid.get(x, y)) && isFalling(grid.get(x, y - 1))) {
+          expect(input.dir !== dir || input.grab).toBe(true);
+          fallingStackAvoidances += 1;
+        }
+      }
+      replay.update(replay.tickMs, input);
+    }
+    expect(fallingStackAvoidances).toBeGreaterThan(0);
+    expect(replay.outcome).toBe(CaveOutcome.Complete);
   });
 
   it('runs the whole campaign without a cave sealing its own exit', () => {

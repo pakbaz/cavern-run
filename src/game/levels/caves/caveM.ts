@@ -12,7 +12,7 @@ export const caveM: CaveSpec = {
   objective: 'Send all four stones through slime to cash in the butterfly nests.',
   mechanics: ['gravity', 'slime', 'butterflies'],
   difficulty: 3,
-  diamondsRequired: 21,
+  diamondsRequired: 30,
   diamondValue: 10,
   extraDiamondValue: 25,
   timeLimit: 55,

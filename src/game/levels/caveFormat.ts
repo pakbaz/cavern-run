@@ -166,7 +166,8 @@ export function validateCave(spec: CaveSpec): string[] {
   }
 
   const amoebaCredit = amoebaYield(spec, parsed);
-  const obtainable = countObtainableDiamonds(counts, amoebaCredit);
+  const butterflyCredit = butterflyYields(parsed);
+  const obtainable = countObtainableDiamonds(counts, amoebaCredit, butterflyCredit);
   if (obtainable < spec.diamondsRequired) {
     problems.push(
       `${spec.id}: quota of ${spec.diamondsRequired} exceeds the ${obtainable} diamonds the cave can yield`,
@@ -181,7 +182,7 @@ export function validateCave(spec: CaveSpec): string[] {
   if (spec.objective.trim().length === 0) problems.push(`${spec.id}: objective must not be empty`);
   if (spec.mechanics.length === 0) problems.push(`${spec.id}: mechanics must not be empty`);
 
-  problems.push(...checkReachability(spec, parsed, amoebaCredit));
+  problems.push(...checkReachability(spec, parsed, amoebaCredit, butterflyCredit));
 
   return problems;
 }
@@ -193,7 +194,12 @@ export function validateCave(spec: CaveSpec): string[] {
  * Static masonry, magic walls, slime and the amoeba block the flood, so a vault
  * that has been accidentally sealed off is caught before it can ship.
  */
-function checkReachability(spec: CaveSpec, parsed: ParsedMap, amoebaCredit: number): string[] {
+function checkReachability(
+  spec: CaveSpec,
+  parsed: ParsedMap,
+  amoebaCredit: number,
+  butterflyCredit: ReadonlyMap<number, number>,
+): string[] {
   const { width, height, tiles } = parsed;
   const start = tiles.indexOf(Tile.Player);
   if (start < 0) return [];
@@ -215,7 +221,7 @@ function checkReachability(spec: CaveSpec, parsed: ParsedMap, amoebaCredit: numb
     if (tile === Tile.Diamond) reachableDiamonds += 1;
     if (tile === Tile.Boulder) reachableBoulders += 1;
     if (tile === Tile.ExitClosed) reachedExit = true;
-    if (isButterfly(tile)) reachableDiamonds += BUTTERFLY_YIELD;
+    if (isButterfly(tile)) reachableDiamonds += butterflyCredit.get(index) ?? 0;
 
     const x = index % width;
     const y = (index - x) / width;
@@ -270,8 +276,49 @@ function checkReachability(spec: CaveSpec, parsed: ParsedMap, amoebaCredit: numb
   return problems;
 }
 
-/** A butterfly's blast clears a 3x3; six diamonds is the conservative take. */
-const BUTTERFLY_YIELD = 6;
+/**
+ * Credit the largest possible blast footprint in each butterfly's initial patrol
+ * space. Steel-cheeked nests yield six, but all-destructible courts yield nine;
+ * a blanket six rejected quotas that the normal-input replay actually earns.
+ * This is a static upper bound, not proof that a player can time the shot;
+ * the normal-input campaign playthrough must still earn the quota.
+ */
+function butterflyYields(parsed: ParsedMap): ReadonlyMap<number, number> {
+  const { width, height, tiles } = parsed;
+  const yields = new Map<number, number>();
+  for (let start = 0; start < tiles.length; start += 1) {
+    if (!isButterfly(tiles[start])) continue;
+    const seen = new Set<number>();
+    const pending = [start];
+    let maximum = 0;
+    while (pending.length > 0) {
+      const at = pending.pop()!;
+      if (seen.has(at)) continue;
+      seen.add(at);
+      const x = at % width;
+      const y = Math.floor(at / width);
+      let footprint = 0;
+      for (let dy = -1; dy <= 1; dy += 1) {
+        for (let dx = -1; dx <= 1; dx += 1) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx >= 0 && nx < width && ny >= 0 && ny < height &&
+              !isBlastProof(tiles[ny * width + nx])) footprint += 1;
+        }
+      }
+      maximum = Math.max(maximum, footprint);
+      for (const [dx, dy] of NEIGHBOURS) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+        const next = ny * width + nx;
+        if (tiles[next] === Tile.Empty && !seen.has(next)) pending.push(next);
+      }
+    }
+    yields.set(start, maximum);
+  }
+  return yields;
+}
 
 /** Cells the amoeba spreads into, and the tiles it can spread through. */
 const AMOEBA_FOOD: ReadonlySet<TileId> = new Set<TileId>([Tile.Empty, Tile.Dirt, Tile.Amoeba]);
@@ -383,16 +430,17 @@ function tally(tiles: readonly TileId[]): Map<TileId, number> {
 
 /**
  * Diamonds already lying around, plus what butterflies and a crystallised
- * amoeba can be made to yield. A butterfly's blast clears a 3x3, but its own
- * cell aside, only the destructible neighbours become diamonds; six is a
- * deliberately conservative estimate.
+ * amoeba can be made to yield. Butterfly credit uses each patrol space's
+ * destructible footprint rather than assuming every nest has steel cheeks.
  */
-function countObtainableDiamonds(counts: Map<TileId, number>, amoebaCredit: number): number {
+function countObtainableDiamonds(
+  counts: Map<TileId, number>,
+  amoebaCredit: number,
+  butterflyCredit: ReadonlyMap<number, number>,
+): number {
   let total = counts.get(Tile.Diamond) ?? 0;
 
-  for (const [tile, count] of counts) {
-    if (isButterfly(tile)) total += count * BUTTERFLY_YIELD;
-  }
+  for (const credit of butterflyCredit.values()) total += credit;
 
   total += amoebaCredit;
   if ((counts.get(Tile.MagicWall) ?? 0) > 0) total += counts.get(Tile.Boulder) ?? 0;
