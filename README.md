@@ -127,7 +127,7 @@ Rotating mid-cave keeps the run going.
 
 | | Cave | Gems | Time | | Cave | Gems | Time |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| A | Buried River | 12 | 80 | K | Closing Shift | 17 | 65 |
+| A | Buried River | 12 | 75 | K | Closing Shift | 17 | 65 |
 | B | Rockfall | 12 | 55 | L | Bloom Chase | 10 | 85 |
 | C | Side Pocket | 11 | 70 | M | Membrane Drop | 30 | 55 |
 | D | Switchbacks | 12 | 85 | N | Crossed Wires | 26 | 48 |

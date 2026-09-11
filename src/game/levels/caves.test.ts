@@ -38,6 +38,19 @@ function structuralSimilarity(a: readonly string[], b: readonly string[]): numbe
 }
 
 describe('the campaign', () => {
+  it('uses a cave-wide rock-and-diamond field for the introductory cave', () => {
+    const first = CAVES[0];
+    expect(first.diamondsRequired).toBe(12);
+    expect(first.map.join('').split('r').length - 1).toBeGreaterThanOrEqual(75);
+    expect(first.map.join('').split('d').length - 1).toBeGreaterThanOrEqual(25);
+    for (const [top, bottom] of [[1, 7], [7, 14], [14, 21]]) {
+      const band = first.map.slice(top, bottom).join('');
+      expect(band.split('r').length - 1).toBeGreaterThanOrEqual(15);
+      expect(band.split('d').length - 1).toBeGreaterThanOrEqual(5);
+    }
+    expect(first.mechanics).toContain('gravity');
+  });
+
   it('ships exactly twenty caves, lettered A through T', () => {
     expect(CAVE_COUNT).toBe(20);
     expect(CAVES.map((cave) => cave.letter).join('')).toBe('ABCDEFGHIJKLMNOPQRST');

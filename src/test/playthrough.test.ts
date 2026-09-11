@@ -23,7 +23,7 @@ describe('playing the caves', () => {
   const expectedWitness: Readonly<
     Record<string, Readonly<{ ticks: number; secondsLeft: number }>>
   > = {
-    A: { ticks: 206, secondsLeft: 51 },
+    A: { ticks: 106, secondsLeft: 61 },
     B: { ticks: 98, secondsLeft: 43 },
     C: { ticks: 127, secondsLeft: 54 },
     D: { ticks: 201, secondsLeft: 59 },
@@ -57,7 +57,10 @@ describe('playing the caves', () => {
   const requiredMechanics: Readonly<
     Record<string, ReadonlyArray<readonly [label: string, count: (run: BotRun) => number, min: number]>>
   > = {
-    A: [['digging', (run) => run.eventCounts.dig, 8]],
+    A: [
+      ['digging', (run) => run.eventCounts.dig, 8],
+      ['rockfalls', (run) => run.eventCounts.land, 4],
+    ],
     B: [['rockfalls', (run) => run.eventCounts.land, 4]],
     C: [['boulder pushes', (run) => run.eventCounts.push, 1]],
     D: [['boulder pushes', (run) => run.eventCounts.push, 3]],
