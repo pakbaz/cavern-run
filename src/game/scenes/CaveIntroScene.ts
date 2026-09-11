@@ -5,6 +5,7 @@ import { layout } from '../../layout';
 import { SceneKey } from '../../config';
 import { audio } from '../audio/index';
 import { CAVE_COUNT } from '../levels/index';
+import { stageLabel } from '../levels/caveFormat';
 import { RUN_STATE_KEY, type RunState } from './RunState';
 import { Ink, bodyStyle, card, centred, designY, relayoutOnResize, titleStyle } from './ui';
 
@@ -35,8 +36,8 @@ export class CaveIntroScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor('#05070f');
     card(this, 24, 380, 356);
 
-    centred(this, designY(64), `CAVE ${spec.letter}`, titleStyle(34));
-    centred(this, designY(100), spec.name.toUpperCase(), bodyStyle(15, Ink.accent));
+    centred(this, designY(64), stageLabel(spec), titleStyle(34));
+    centred(this, designY(100), spec.stageKind === 'intermission' ? 'SHORT CAVE' : spec.name.toUpperCase(), bodyStyle(15, Ink.accent));
 
     centred(this, designY(126), `CHALLENGE ${spec.difficulty}/5`, bodyStyle(10, Ink.gold));
     centred(this, designY(152), `${spec.diamondsRequired} GEMS / ${spec.timeLimit}s / ${session.lives} LIVES`, bodyStyle(12));

@@ -6,6 +6,7 @@ import { toggleFullscreen } from '../../fullscreen';
 import { DEFAULT_PALETTE_ID, Depth, PALETTES, SceneKey, TILE_SIZE } from '../../config';
 import { audio } from '../audio/index';
 import { CAVE_COUNT, caveAt } from '../levels/index';
+import { stageLabel } from '../levels/caveFormat';
 import {
   DIRT_VARIANTS,
   PLAYER_IDLE_FRAMES,
@@ -455,7 +456,7 @@ export class TitleScene extends Phaser.Scene {
     g.closePath();
     g.fillPath();
 
-    centred(this, designY(116), `${CAVE_COUNT} CAVES.  ONE WAY OUT.`, bodyStyle(13, Ink.accent))
+    centred(this, designY(116), `${CAVE_COUNT} STAGES.  ONE WAY OUT.`, bodyStyle(13, Ink.accent))
       .setDepth(Depth.Menu);
   }
 
@@ -480,7 +481,7 @@ export class TitleScene extends Phaser.Scene {
       ...(canResume
         ? [
             {
-              label: () => `CONTINUE CAVE ${caveAt(this.state.progress.furthestCave).letter}`,
+              label: () => `CONTINUE ${stageLabel(caveAt(this.state.progress.furthestCave))}`,
               activate: () => this.startRun(true),
             },
             { label: () => 'NEW RUN', activate: () => this.startRun(false) },
@@ -669,7 +670,7 @@ export class TitleScene extends Phaser.Scene {
     divider(this, designX(-140), designY(top + 22), 280 * menuScale(), 0x8a6a24).setDepth(Depth.Menu);
 
     rows.forEach((row, index) => {
-      const line = `${index + 1}. ${row.name.padEnd(4)} ${pad(row.score, 6)}   CAVE ${row.caveLetter}`;
+      const line = `${index + 1}. ${row.name.padEnd(4)} ${pad(row.score, 6)}   STAGE ${row.caveReached}`;
       this.add
         .text(designX(-140), designY(top + 34 + index * 18), line, bodyStyle(12, Ink.body))
         .setOrigin(0, 0.5)

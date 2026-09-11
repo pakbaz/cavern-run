@@ -4,6 +4,7 @@ import { Depth, HUD_HEIGHT, SceneKey, TIME_CRITICAL_SECONDS, TIME_PRESSURE_SECON
 import { layout } from '../../layout';
 import { toggleFullscreen } from '../../fullscreen';
 import { TextureKey } from '../render/TextureFactory';
+import { stageLabel } from '../levels/caveFormat';
 import { RUN_STATE_KEY, type RunState } from './RunState';
 import { bodyStyle, Ink, pad, relayoutOnResize } from './ui';
 
@@ -40,7 +41,7 @@ export class HudScene extends Phaser.Scene {
     this.quota = this.text(30, mid, '', Ink.bright);
     this.add.image(108, mid, TextureKey.playerIdle(0)).setScale(0.5).setDepth(Depth.Hud);
     this.lives = this.text(120, mid, '', Ink.bright);
-    this.text(compact ? 86 : width / 2, mid, `${compact ? '' : 'CAVE '}${this.state.session.spec.letter}`, Ink.accent).setOrigin(0.5);
+    this.text(compact ? 86 : width / 2, mid, stageLabel(this.state.session.spec, compact), Ink.accent).setOrigin(0.5);
     this.timer = this.text(width - 42, mid, '', Ink.bright).setOrigin(1, 0.5);
     this.score = this.text(width - 96, mid, '', Ink.gold).setOrigin(1, 0.5).setVisible(width >= 300);
     this.add.rectangle(width - 18, mid, 34, 28, 0x142534).setStrokeStyle(1, 0x38536a)

@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/pakbaz/cavern-run/actions/workflows/ci.yml/badge.svg)](https://github.com/pakbaz/cavern-run/actions/workflows/ci.yml)
 
-**20 caves. One way out.**
+**20 stages. One way out.**
 
 **[Play it in your browser &rarr;](https://pakbaz.github.io/cavern-run/)**
 
@@ -125,40 +125,46 @@ Rotating mid-cave keeps the run going.
 
 ## The caves
 
-| | Cave | Gems | Time | | Cave | Gems | Time |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| A | Buried River | 12 | 80 | K | Closing Shift | 17 | 65 |
-| B | Rockfall | 12 | 55 | L | Bloom Chase | 10 | 85 |
-| C | Side Pocket | 11 | 70 | M | Membrane Drop | 30 | 55 |
-| D | Switchbacks | 12 | 85 | N | Crossed Wires | 26 | 48 |
-| E | Spark Lock | 10 | 60 | O | Twin Blooms | 28 | 80 |
-| F | Double Fuse | 14 | 95 | P | Alloy and Wings | 16 | 70 |
-| G | Rich Strike | 7 | 45 | Q | Three Charges | 26 | 65 |
-| H | Seven Furnaces | 9 | 80 | R | Blast Passage | 24 | 65 |
-| I | Relay Kilns | 13 | 80 | S | Cascade Works | 14 | 45 |
-| J | Seed Crystal | 18 | 70 | T | Foundry Run | 33 | 130 |
+The campaign follows the twenty separate Level 1 screen profiles in
+[this BD1 reference collection](https://www.boulder-dash.nl/down/maps/PeterLiepa/BoulderDash01.html):
+sixteen caves and four intermissions, in that order. Each stage has its own
+structural and enemy reference, not a repeated introductory cave template.
+Tile arrangements are independently authored; the published quotas, clocks,
+diamond values and bonus values below are retained.
 
-Five challenge tiers introduce individual mechanics before combining them.
-Simulation speed rises in small steps from 6.5 to 9.25 scans per second.
-Each cave has its own clock, with room to learn early puzzles and tighter
-time pressure later. Briefings show the objective, required mechanics, and
-challenge tier before the player starts the clock.
+| # | Stage | Gems | Time | Value | Bonus |
+| --- | --- | --- | --- | --- | --- |
+| 1 | A: Intro | 12 | 150 | 10 | 15 |
+| 2 | B: Rooms | 10 | 150 | 20 | 50 |
+| 3 | C: Maze | 24 | 150 | 15 | 0 |
+| 4 | D: Butterflies | 36 | 120 | 5 | 20 |
+| 5 | Intermission 1 | 6 | 10 | 30 | 0 |
+| 6 | E: Guards | 4 | 150 | 50 | 90 |
+| 7 | F: Firefly Dens | 4 | 150 | 40 | 60 |
+| 8 | G: Amoeba | 15 | 120 | 10 | 20 |
+| 9 | H: Enchanted Wall | 10 | 120 | 10 | 20 |
+| 10 | Intermission 2 | 16 | 15 | 10 | 0 |
+| 11 | I: Greed | 75 | 150 | 5 | 10 |
+| 12 | J: Tracks | 12 | 150 | 25 | 60 |
+| 13 | K: Crowd | 6 | 120 | 50 | 0 |
+| 14 | L: Walls | 19 | 180 | 20 | 0 |
+| 15 | Intermission 3 | 14 | 20 | 10 | 0 |
+| 16 | M: Apocalypse | 50 | 160 | 5 | 8 |
+| 17 | N: Zigzag | 30 | 150 | 10 | 20 |
+| 18 | O: Funnel | 15 | 120 | 10 | 20 |
+| 19 | P: Enchanted Boxes | 12 | 150 | 10 | 20 |
+| 20 | Intermission 4 | 6 | 20 | 30 | 0 |
 
-The layouts are built from structural motifs rather than scattered contents:
-bricked vaults opened by creature blasts, boulder gates, furnaces feeding a
-magic wall, slime cascades, live amoeba vents that the player must plug, and
-corridors made irreversible by expanding walls. Production caves contain too
-few loose diamonds to meet the quota: creating and releasing the rest is the
-puzzle. Every layout, quota, clock and name is original to this project.
+Magic-wall charge lasts 20 seconds in H and P, 8 seconds in O, and 3 seconds
+in Intermission 4. Amoeba slow-growth phases last 75 seconds in G and 140
+seconds in M. The historical PAL timing defect noted for Intermission 3 is
+not reproduced: every stage must be completable in this engine.
 
-Related mechanics use different spaces rather than repeated templates:
-Double Fuse has a nested keep, Relay Kilns climbs three separated terraces,
-Twin Blooms joins offset chambers through a chimney, Three Charges requires
-timed drops over moving butterfly patrols, and Cascade Works drains stacked
-silos. Classic cave-digging games inform the broad enemy mix and diamond
-counts, while the cell layouts and routes are independently authored.
-Campaign checks compare interior structures after translation and reflection,
-and replay a complete A-to-T run to catch repeated stages.
+Simulation speed increases gradually from 6.5 to 9.25 scans per second.
+Briefings show each stage's correct cave or intermission label, objective,
+mechanics and clock before play starts. Enemy-guarded caves require safe
+movement around patrols; butterfly, amoeba and magic-wall production stages
+require making diamonds rather than collecting an unrelated loose quota.
 
 ## How it is built
 
@@ -195,13 +201,13 @@ src/
   layout.ts          picks the canvas size and tile counts from the window
   game/
     engine/          the simulation: grid, rules, run state (no Phaser)
-    levels/          the 20 caves, as ASCII maps plus tuning
+    levels/          16 caves and 4 intermissions, ASCII maps and reference settings
     render/          procedural textures, world drawing, lighting, particles
     audio/           Web Audio synthesis: adaptive score and sound effects
     input/           keyboard, gamepad and touch, unified
     state/           IndexedDB persistence with localStorage fallback
     scenes/          Phaser scenes: title, cave intro, play, HUD, results
-  test/              headless harness and a bot that plays all 20 caves
+  test/              headless harness and normal-input routes for all 20 stages
 ```
 
 ### The look
@@ -250,5 +256,7 @@ storage failing is never allowed to break the game.
 
 ## Licence
 
-Original work. Not affiliated with, derived from, or containing any assets or
-level data from Boulder Dash, which is a trademark of BBG Entertainment GmbH.
+Independently authored tile arrangements, generated artwork and original
+music. The campaign uses public BD1 stage names and numeric settings as
+references; no original map images, decoded tile maps or recordings are
+included. Not affiliated with Boulder Dash, a trademark of BBG Entertainment GmbH.

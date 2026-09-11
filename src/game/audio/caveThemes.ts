@@ -73,7 +73,7 @@ export type DrumKit = 'soft' | 'tight' | 'hard';
 export const THEMES: readonly CaveTheme[] = [
   {
     id: 'A',
-    name: 'Buried River',
+    name: 'Intro',
     mode: 'dorian',
     rootOffset: 0,
     baseTempo: 86,
@@ -97,7 +97,7 @@ export const THEMES: readonly CaveTheme[] = [
   },
   {
     id: 'B',
-    name: 'Rockfall',
+    name: 'Rooms',
     mode: 'aeolian',
     rootOffset: -1,
     baseTempo: 94,
@@ -121,7 +121,7 @@ export const THEMES: readonly CaveTheme[] = [
   },
   {
     id: 'C',
-    name: 'Side Pocket',
+    name: 'Maze',
     mode: 'dorian',
     rootOffset: 1,
     baseTempo: 88,
@@ -145,7 +145,7 @@ export const THEMES: readonly CaveTheme[] = [
   },
   {
     id: 'D',
-    name: 'Switchbacks',
+    name: 'Butterflies',
     mode: 'aeolian',
     rootOffset: 0,
     baseTempo: 98,
@@ -169,7 +169,7 @@ export const THEMES: readonly CaveTheme[] = [
   },
   {
     id: 'E',
-    name: 'Spark Lock',
+    name: 'Intermission 1',
     mode: 'harmonicMinor',
     rootOffset: -1,
     baseTempo: 100,
@@ -193,7 +193,7 @@ export const THEMES: readonly CaveTheme[] = [
   },
   {
     id: 'F',
-    name: 'Double Fuse',
+    name: 'Guards',
     mode: 'aeolian',
     rootOffset: 0,
     baseTempo: 102,
@@ -217,7 +217,7 @@ export const THEMES: readonly CaveTheme[] = [
   },
   {
     id: 'G',
-    name: 'Rich Strike',
+    name: 'Firefly Dens',
     mode: 'dorian',
     rootOffset: 1,
     baseTempo: 92,
@@ -241,7 +241,7 @@ export const THEMES: readonly CaveTheme[] = [
   },
   {
     id: 'H',
-    name: 'Seven Furnaces',
+    name: 'Amoeba',
     mode: 'harmonicMinor',
     rootOffset: 0,
     baseTempo: 96,
@@ -265,7 +265,7 @@ export const THEMES: readonly CaveTheme[] = [
   },
   {
     id: 'I',
-    name: 'Relay Kilns',
+    name: 'Enchanted Wall',
     mode: 'harmonicMinor',
     rootOffset: -1,
     baseTempo: 98,
@@ -289,7 +289,7 @@ export const THEMES: readonly CaveTheme[] = [
   },
   {
     id: 'J',
-    name: 'Seed Crystal',
+    name: 'Intermission 2',
     mode: 'dorian',
     rootOffset: 0,
     baseTempo: 88,
@@ -313,7 +313,7 @@ export const THEMES: readonly CaveTheme[] = [
   },
   {
     id: 'K',
-    name: 'Closing Shift',
+    name: 'Greed',
     mode: 'phrygian',
     rootOffset: 0,
     baseTempo: 100,
@@ -337,7 +337,7 @@ export const THEMES: readonly CaveTheme[] = [
   },
   {
     id: 'L',
-    name: 'Bloom Chase',
+    name: 'Tracks',
     mode: 'hungarian',
     rootOffset: 1,
     baseTempo: 94,
@@ -361,7 +361,7 @@ export const THEMES: readonly CaveTheme[] = [
   },
   {
     id: 'M',
-    name: 'Membrane Drop',
+    name: 'Crowd',
     mode: 'phrygian',
     rootOffset: -1,
     baseTempo: 96,
@@ -385,7 +385,7 @@ export const THEMES: readonly CaveTheme[] = [
   },
   {
     id: 'N',
-    name: 'Crossed Wires',
+    name: 'Walls',
     mode: 'harmonicMinor',
     rootOffset: 0,
     baseTempo: 104,
@@ -409,7 +409,7 @@ export const THEMES: readonly CaveTheme[] = [
   },
   {
     id: 'O',
-    name: 'Twin Blooms',
+    name: 'Intermission 3',
     mode: 'aeolian',
     rootOffset: 1,
     baseTempo: 90,
@@ -433,7 +433,7 @@ export const THEMES: readonly CaveTheme[] = [
   },
   {
     id: 'P',
-    name: 'Alloy and Wings',
+    name: 'Apocalypse',
     mode: 'hungarian',
     rootOffset: 0,
     baseTempo: 100,
@@ -457,7 +457,7 @@ export const THEMES: readonly CaveTheme[] = [
   },
   {
     id: 'Q',
-    name: 'Three Charges',
+    name: 'Zigzag',
     mode: 'harmonicMinor',
     rootOffset: -1,
     baseTempo: 102,
@@ -481,7 +481,7 @@ export const THEMES: readonly CaveTheme[] = [
   },
   {
     id: 'R',
-    name: 'Blast Passage',
+    name: 'Funnel',
     mode: 'phrygian',
     rootOffset: 1,
     baseTempo: 106,
@@ -505,7 +505,7 @@ export const THEMES: readonly CaveTheme[] = [
   },
   {
     id: 'S',
-    name: 'Cascade Works',
+    name: 'Enchanted Boxes',
     mode: 'locrian',
     rootOffset: -1,
     baseTempo: 104,
@@ -529,7 +529,7 @@ export const THEMES: readonly CaveTheme[] = [
   },
   {
     id: 'T',
-    name: 'Foundry Run',
+    name: 'Intermission 4',
     mode: 'locrian',
     rootOffset: 0,
     baseTempo: 108,
