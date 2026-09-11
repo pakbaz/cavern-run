@@ -93,6 +93,8 @@ pathfinding: you still choose the safe route. Restarting costs a life.
 Use **FULL** at the right of the status bar for native fullscreen on supported
 mobile and desktop browsers; **BACK** leaves fullscreen. Browsers without
 native fullscreen still use the full available browser viewport.
+Fullscreen is also available from the title menu. Tap the MUSIC or SOUND
+row to cycle its volume, including mute, or use left/right on a keyboard.
 
 Each cave's introduction waits for Enter or a tap, giving you time to read
 the puzzle hint before starting. Switching tabs or leaving the game window
@@ -195,19 +197,18 @@ src/
 
 ### The look
 
-There are no image files either. `render/TextureFactory.ts` paints every
-sprite into a canvas at boot from one shared lighting model &mdash; a key
-light up and to the left, a cool fill from below &mdash; so a boulder, a
-diamond facet and a steel rivet all catch the light from the same place. Each
-cave recolours the whole set from its palette, which is why twenty caves that
-share one tileset still look like twenty different places.
+`render/TextureFactory.ts` paints all gameplay art at boot. Soil uses shaded
+clods instead of dense pixel noise; boulders have distinct flat facets, and
+the miner has an animated pick, lamp and larger silhouette. Fireflies,
+butterflies, aqua slime and lime amoebas each have a distinct shape or colour.
+The optional title poster stays behind this generated art.
 
-On top of that the world is drawn in layers: two scrolling strata sheets
-parallax behind the cave at different rates, everything solid casts a soft
-contact shadow, diamonds and the exit get an additive bloom that pulses, and
-boulders roll into the direction they are falling and squash when they land.
-The strata sheets are built from sine terms whose periods divide the sheet
-exactly in both axes, so the backdrop tiles forever without a seam.
+Carved edge lighting and contact shadows make newly dug tunnels read as
+openings in solid terrain. Layered strata sit behind the cave; diamonds and
+the exit glow, while the helmet lamp points ahead of the miner. Each palette
+has its own ambient light and particles. Reduced-motion mode suppresses
+ambient drifting, and the view fits partial edge tiles without stretching
+the square cave cells.
 
 ### The soundtrack
 

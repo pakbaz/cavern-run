@@ -2,26 +2,34 @@ import { describe, expect, it } from 'vitest';
 
 import { CAVE_HEIGHT, CAVE_WIDTH, TILE_SIZE, VIEWPORT_TILES_H, VIEWPORT_TILES_W } from '../../config';
 import {
+  EDGE_MASKS,
+  EdgeBit,
   animFrame,
   approachCamera,
   cameraTarget,
   clamp,
+  drift,
+  edgeMask,
   glowTransform,
   formatScore,
   formatTime,
   interpolate,
+  lampCone,
   lampFalloff,
   lerp,
   mixColor,
   packRgb,
   rgb,
   shade,
+  sheetCell,
   smoothstep,
   tileCentre,
   tileToPixel,
   tileVariant,
   toCss,
+  valueNoise,
   visibleTiles,
+  wrap,
 } from './renderMath';
 
 const VIEW_W_PX = VIEWPORT_TILES_W * TILE_SIZE;
@@ -223,5 +231,183 @@ describe('glowTransform', () => {
   it('never returns a negative scale', () => {
     expect(glowTransform(-4, 32, 32).scale).toBe(0);
     expect(glowTransform(-4, 32, 32).reach).toBe(0);
+  });
+});
+
+describe('edge masks', () => {
+  // Terrain is shaded by which of its sides have been dug open, so a wall of
+  // untouched dirt reads as one mass and only the faces a player has actually
+  // exposed get a bevel.
+  it('packs open sides into a bitmask', () => {
+    expect(edgeMask(false, false, false, false)).toBe(0);
+    expect(edgeMask(true, false, false, false)).toBe(EdgeBit.Up);
+    expect(edgeMask(false, true, false, false)).toBe(EdgeBit.Right);
+    expect(edgeMask(false, false, true, false)).toBe(EdgeBit.Down);
+    expect(edgeMask(false, false, false, true)).toBe(EdgeBit.Left);
+    expect(edgeMask(true, true, true, true)).toBe(EDGE_MASKS - 1);
+  });
+
+  it('gives every combination of open sides its own mask', () => {
+    const seen = new Set<number>();
+    for (const up of [false, true]) {
+      for (const right of [false, true]) {
+        for (const down of [false, true]) {
+          for (const left of [false, true]) seen.add(edgeMask(up, right, down, left));
+        }
+      }
+    }
+    expect(seen.size).toBe(EDGE_MASKS);
+    for (const mask of seen) expect(mask).toBeLessThan(EDGE_MASKS);
+  });
+
+  it('lays frames out left to right, then top to bottom', () => {
+    expect(sheetCell(0, 8)).toEqual({ col: 0, row: 0 });
+    expect(sheetCell(7, 8)).toEqual({ col: 7, row: 0 });
+    expect(sheetCell(8, 8)).toEqual({ col: 0, row: 1 });
+    expect(sheetCell(19, 8)).toEqual({ col: 3, row: 2 });
+    // Degenerate inputs must still land inside the sheet.
+    expect(sheetCell(3, 0)).toEqual({ col: 0, row: 3 });
+    expect(sheetCell(-2, 4)).toEqual({ col: 0, row: 0 });
+  });
+});
+
+describe('lampCone', () => {
+  // The lamp is on the miner's helmet, so it leads them. Getting the offset
+  // wrong either leaves the miner standing in their own shadow or pushes the
+  // pool of light off them entirely.
+  it('pushes the light the way the miner is facing', () => {
+    const right = lampCone(100, 100, 1, 4, 32);
+    const left = lampCone(100, 100, -1, 4, 32);
+    expect(right.x).toBeGreaterThan(100);
+    expect(left.x).toBeLessThan(100);
+    expect(right.x - 100).toBeCloseTo(100 - left.x, 6);
+  });
+
+  it('keeps the miner well inside the lit pool', () => {
+    const cone = lampCone(0, 0, 1, 4, 32);
+    expect(Math.abs(cone.x)).toBeLessThan(cone.radiusX * 32);
+    expect(Math.abs(cone.y)).toBeLessThan(cone.radiusY * 32);
+  });
+
+  it('stretches the cone along the direction of travel', () => {
+    const cone = lampCone(0, 0, 1, 4, 32);
+    expect(cone.radiusX).toBeGreaterThan(cone.radiusY);
+    expect(cone.radiusY).toBe(4);
+    // A zero stretch is a plain round lamp centred on the miner's head.
+    const round = lampCone(50, 50, -1, 3, 32, 0);
+    expect(round.x).toBe(50);
+    expect(round.radiusX).toBe(round.radiusY);
+  });
+
+  it('treats a zero facing as looking right rather than collapsing', () => {
+    expect(lampCone(0, 0, 0, 4, 32).x).toBeGreaterThan(0);
+  });
+});
+
+describe('ambient drift', () => {
+  it('wraps a mote back into the view instead of losing it', () => {
+    expect(wrap(5, 4)).toBe(1);
+    expect(wrap(-1, 4)).toBe(3);
+    expect(wrap(3, 4)).toBe(3);
+    expect(wrap(2, 0)).toBe(0);
+    expect(wrap(-9, 4)).toBe(3);
+  });
+
+  it('drifts within its amplitude and never repeats on a short loop', () => {
+    for (let t = 0; t < 20000; t += 250) {
+      expect(Math.abs(drift(0.7, t, 6))).toBeLessThanOrEqual(6.000001);
+    }
+    expect(drift(0.7, 0, 6)).not.toBeCloseTo(drift(0.7, 6800, 6), 3);
+    expect(drift(0, 0, 6)).toBe(0);
+  });
+});
+
+describe('valueNoise', () => {
+  const lattice = (index: number): number => ((index * 2654435761) % 1000) / 1000;
+  const noise = valueNoise(6, 4, lattice);
+
+  // Regression: the soil samples one cell up and to the left to work out its
+  // slope, so the very first column asks the lattice for cell -1. When that
+  // lookup was not wrapped it read past the start of the array, and the
+  // undefined corner turned the pixel colour into NaN -- which painted as a
+  // dark seam down the left edge of every dirt tile in the cave.
+  it('is finite for negative and out-of-range coordinates', () => {
+    for (const [x, y] of [[-1, -1], [-7, 3], [3, -9], [999, 999], [-0.5, -0.5]]) {
+      expect(Number.isFinite(noise(x, y))).toBe(true);
+    }
+  });
+
+  it('stays inside the range of its lattice', () => {
+    for (let y = -8; y < 40; y += 1) {
+      for (let x = -8; x < 40; x += 1) {
+        const value = noise(x, y);
+        expect(value).toBeGreaterThanOrEqual(0);
+        expect(value).toBeLessThanOrEqual(1);
+      }
+    }
+  });
+
+  it('wraps, so a sheet of it tiles without a seam', () => {
+    const period = 6 * 4;
+    for (let i = 0; i < 12; i += 1) {
+      expect(noise(i, 3)).toBeCloseTo(noise(i + period, 3), 10);
+      expect(noise(3, i)).toBeCloseTo(noise(3, i + period), 10);
+      expect(noise(i, i)).toBeCloseTo(noise(i - period, i - period), 10);
+    }
+  });
+
+  it('interpolates between lattice corners rather than snapping', () => {
+    const a = noise(0, 0);
+    const b = noise(4, 0);
+    const mid = noise(2, 0);
+    expect(mid).toBeGreaterThanOrEqual(Math.min(a, b));
+    expect(mid).toBeLessThanOrEqual(Math.max(a, b));
+    // A lattice corner samples exactly, so the noise is continuous with it.
+    expect(noise(4, 0)).toBeCloseTo(b, 10);
+  });
+
+  it('survives a degenerate lattice or spacing', () => {
+    const flat = valueNoise(0, 0, () => 0.5);
+    expect(flat(3, 7)).toBeCloseTo(0.5, 10);
+    expect(Number.isFinite(flat(-4, -4))).toBe(true);
+  });
+});
+
+describe('a viewport that is not a whole number of cells', () => {
+  // The canvas matches the window's aspect ratio exactly, so the last column
+  // and row on screen are usually partial. Everything here works in fractional
+  // cells; rounding up would make the camera believe the view is wider than it
+  // is and stop it short of the cave's right and bottom edges.
+  const partial = { widthTiles: 20.4, heightTiles: 12.7 };
+  const viewW = partial.widthTiles * TILE_SIZE;
+  const viewH = partial.heightTiles * TILE_SIZE;
+
+  it('lets the camera reach the far edge of the cave exactly', () => {
+    const far = cameraTarget(CAVE_WIDTH - 1, CAVE_HEIGHT - 1, CAVE_WIDTH, CAVE_HEIGHT, 1e9, 1e9, partial);
+    expect(far.x).toBeCloseTo(CAVE_WIDTH * TILE_SIZE - viewW, 6);
+    expect(far.y).toBeCloseTo(CAVE_HEIGHT * TILE_SIZE - viewH, 6);
+    // The last column of the cave is genuinely on screen at that scroll.
+    expect(far.x + viewW).toBeCloseTo(CAVE_WIDTH * TILE_SIZE, 6);
+  });
+
+  it('still refuses to show anything before the first cell', () => {
+    const near = cameraTarget(0, 0, CAVE_WIDTH, CAVE_HEIGHT, -1e9, -1e9, partial);
+    expect(near.x).toBe(0);
+    expect(near.y).toBe(0);
+  });
+
+  it('centres a cave smaller than the view on the fractional axis', () => {
+    const small = cameraTarget(1, 1, 8, 4, 0, 0, partial);
+    expect(small.x).toBeCloseTo((8 * TILE_SIZE - viewW) / 2, 6);
+    expect(small.y).toBeCloseTo((4 * TILE_SIZE - viewH) / 2, 6);
+  });
+
+  it('draws the partly visible column and row at the far edge', () => {
+    const scrollX = 3.5 * TILE_SIZE;
+    const range = visibleTiles(scrollX, 0, CAVE_WIDTH, CAVE_HEIGHT, partial);
+    // The right edge of the view falls inside this cell, so it must be drawn.
+    const lastVisible = Math.floor((scrollX + viewW) / TILE_SIZE);
+    expect(range.maxX).toBeGreaterThanOrEqual(lastVisible);
+    expect(range.minX).toBeLessThanOrEqual(Math.floor(scrollX / TILE_SIZE));
   });
 });

@@ -60,12 +60,20 @@ export class RenderLayer {
   setCave(spec: CaveSpec, cave: Cave, caveIndex: number): void {
     this.world.setCave(spec, cave);
     this.lighting.setPalette(this.world.activePalette, caveIndex, CAVES.length);
+    this.effects.setPalette(this.world.activePalette);
   }
 
   update(cave: Cave, runtime: CaveRuntime, alpha: number, deltaMs: number, events: readonly SimEvent[]): void {
     this.effects.handle(events);
+    this.effects.update(deltaMs);
     this.world.draw(cave, runtime, alpha, deltaMs);
-    this.lighting.draw(cave, this.world.playerScreenX, this.world.playerScreenY, runtime.ticks);
+    this.lighting.draw(
+      cave,
+      this.world.playerScreenX,
+      this.world.playerScreenY,
+      runtime.ticks,
+      this.world.playerFacing,
+    );
   }
 
   destroy(): void {
