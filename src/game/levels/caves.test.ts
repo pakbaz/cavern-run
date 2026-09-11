@@ -5,6 +5,38 @@ import { Tile } from '../engine/tiles';
 import { buildCave, parseCaveMap, validateCave } from './caveFormat';
 import { CAVES, CAVE_COUNT, caveAt } from './index';
 
+/**
+ * Compare actual interior barriers, not the shared steel border or dirt fill.
+ * Translation/reflection invariance prevents a shifted or mirrored template
+ * from passing as a new puzzle; tile substitutions do not change occupancy.
+ */
+function structuralSimilarity(a: readonly string[], b: readonly string[]): number {
+  const occupied = (map: readonly string[]) => map.flatMap((row, y) =>
+    [...row].flatMap((tile, x) =>
+      y > 0 && y < map.length - 1 && x > 0 && x < row.length - 1 && /[WwMSHVX]/.test(tile)
+        ? [[x, y] as const]
+        : [],
+    ),
+  );
+  const left = occupied(a);
+  const right = occupied(b);
+  let overlap = 0;
+  for (const sx of [-1, 1]) {
+    for (const sy of [-1, 1]) {
+      const offsets = new Map<string, number>();
+      for (const [ax, ay] of left) {
+        for (const [bx, by] of right) {
+          const offset = `${ax - bx * sx},${ay - by * sy}`;
+          const count = (offsets.get(offset) ?? 0) + 1;
+          offsets.set(offset, count);
+          overlap = Math.max(overlap, count);
+        }
+      }
+    }
+  }
+  return (2 * overlap) / (left.length + right.length);
+}
+
 describe('the campaign', () => {
   it('ships exactly twenty caves, lettered A through T', () => {
     expect(CAVE_COUNT).toBe(20);
@@ -29,6 +61,23 @@ describe('the campaign', () => {
     expect(caveAt(-5)).toBe(CAVES[0]);
     expect(caveAt(999)).toBe(CAVES[CAVES.length - 1]);
     expect(caveAt(3)).toBe(CAVES[3]);
+  });
+
+  it.each(['JO', 'EF', 'ER', 'FR', 'HI', 'HS', 'IS', 'GQ', 'MQ'])(
+    'separates the interior topology of formerly repeated family %s',
+    (pair) => {
+      const [a, b] = [...pair].map((letter) => CAVES.find((cave) => cave.letter === letter)!);
+      expect(structuralSimilarity(a.map, b.map), `${pair}: aligned structural Dice similarity`)
+        .toBeLessThan(0.68);
+    },
+  );
+
+  it('cannot disguise a reused structure with dirt, tile swaps, shifts or reflection', () => {
+    const original = ['WWWWWWW', 'W.W...W', 'W.WW..W', 'W.....W', 'WWWWWWW'];
+    const disguised = ['WWWWWWW', 'W.....W', 'W...w.W', 'W..MM.W', 'WWWWWWW'];
+    expect(structuralSimilarity(original, disguised)).toBe(1);
+    const different = ['WWWWWWW', 'W.W...W', 'W.W...W', 'W.W...W', 'WWWWWWW'];
+    expect(structuralSimilarity(original, different)).toBeLessThan(0.68);
   });
 
   it.each(CAVES.map((cave) => [cave.letter, cave] as const))('cave %s validates', (_letter, cave) => {
@@ -61,6 +110,18 @@ describe('the campaign', () => {
     expect(avg(last.map((c) => c.diamondValue))).toBeGreaterThan(
       avg(first.map((c) => c.diamondValue)),
     );
+  });
+
+  it.each([
+    ['A', 'introductory digging', 12, 16],
+    ['E', 'first room breach', 8, 14],
+    ['R', 'winding maze', 20, 28],
+    ['M', 'butterfly production', 30, 36],
+    ['Q', 'butterfly patrol courts', 24, 36],
+  ] as const)('keeps cave %s at a classic-scale %s quota', (letter, _archetype, minimum, maximum) => {
+    const quota = CAVES.find((cave) => cave.letter === letter)!.diamondsRequired;
+    expect(quota).toBeGreaterThanOrEqual(minimum);
+    expect(quota).toBeLessThanOrEqual(maximum);
   });
 
   it('raises simulation speed gradually without sudden difficulty spikes', () => {
@@ -141,6 +202,19 @@ describe('validateCave', () => {
 
   it('rejects a quota the cave cannot possibly satisfy', () => {
     expect(validateCave({ ...good, diamondsRequired: 5000 }).join()).toContain('quota of 5000');
+  });
+
+  it('counts destructible butterfly footprints without crediting steel cheeks', () => {
+    const reinforced = CAVES.find((cave) => cave.letter === 'G')!;
+    expect(validateCave({ ...reinforced, diamondsRequired: 8 }).join())
+      .toContain('quota of 8 exceeds the 7 diamonds');
+    const membrane = CAVES.find((cave) => cave.letter === 'M')!;
+    expect(validateCave({ ...membrane, diamondsRequired: 30 })).toEqual([]);
+    expect(validateCave({
+      ...membrane,
+      diamondsRequired: 38,
+      map: membrane.map.map((row) => row.replaceAll('w', 'W')),
+    }).join()).toContain('quota of 38 exceeds');
   });
 
   it('will not count on an amoeba with more room than it can fill', () => {

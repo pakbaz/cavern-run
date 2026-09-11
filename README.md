@@ -127,15 +127,15 @@ Rotating mid-cave keeps the run going.
 
 | | Cave | Gems | Time | | Cave | Gems | Time |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| A | Buried River | 10 | 80 | K | Closing Shift | 17 | 65 |
+| A | Buried River | 12 | 80 | K | Closing Shift | 17 | 65 |
 | B | Rockfall | 12 | 55 | L | Bloom Chase | 10 | 85 |
-| C | Side Pocket | 11 | 70 | M | Membrane Drop | 21 | 55 |
+| C | Side Pocket | 11 | 70 | M | Membrane Drop | 30 | 55 |
 | D | Switchbacks | 12 | 85 | N | Crossed Wires | 26 | 48 |
 | E | Spark Lock | 10 | 60 | O | Twin Blooms | 28 | 80 |
 | F | Double Fuse | 14 | 95 | P | Alloy and Wings | 16 | 70 |
-| G | Rich Strike | 7 | 45 | Q | Three Charges | 20 | 65 |
-| H | Seven Furnaces | 9 | 80 | R | Blast Passage | 20 | 65 |
-| I | Relay Kilns | 13 | 80 | S | Cascade Works | 14 | 55 |
+| G | Rich Strike | 7 | 45 | Q | Three Charges | 26 | 65 |
+| H | Seven Furnaces | 9 | 80 | R | Blast Passage | 24 | 65 |
+| I | Relay Kilns | 13 | 80 | S | Cascade Works | 14 | 45 |
 | J | Seed Crystal | 18 | 70 | T | Foundry Run | 33 | 130 |
 
 Five challenge tiers introduce individual mechanics before combining them.
@@ -150,6 +150,15 @@ magic wall, slime cascades, live amoeba vents that the player must plug, and
 corridors made irreversible by expanding walls. Production caves contain too
 few loose diamonds to meet the quota: creating and releasing the rest is the
 puzzle. Every layout, quota, clock and name is original to this project.
+
+Related mechanics use different spaces rather than repeated templates:
+Double Fuse has a nested keep, Relay Kilns climbs three separated terraces,
+Twin Blooms joins offset chambers through a chimney, Three Charges requires
+timed drops over moving butterfly patrols, and Cascade Works drains stacked
+silos. Classic cave-digging games inform the broad enemy mix and diamond
+counts, while the cell layouts and routes are independently authored.
+Campaign checks compare interior structures after translation and reflection,
+and replay a complete A-to-T run to catch repeated stages.
 
 ## How it is built
 
@@ -213,15 +222,18 @@ the square cave cells.
 ### The soundtrack
 
 All twenty legacy melodies have been replaced by new original compositions.
-Each cave has its own motif, rhythm, chord progression and bass pulse, named
+Each cave has its own motif, melodic rhythm and chord progression, named
 for its stage and shaped around its puzzle. A shared three-note cadence and
 subterranean instrument palette keep the campaign musically connected.
 
 The arrangement develops with the clock and nearby danger. Intensity changes
 smoothly, and larger arrangement changes wait for a bar boundary. One clear
-foreground melody sits over quiet pads, bass and restrained percussion.
+foreground melody is audible from the first bar, using the full phrase that
+previously arrived near the end. Quiet sustained chords sit underneath it;
+the pulsing bass, drums, hi-hats and continuous air hiss are removed entirely.
 There is no competing counter-melody, melodic echo, panic drone or countdown
-ticker. Tempo changes remain small so danger does not overwhelm the tune.
+ticker. A small late-stage lift in expression and brightness preserves the
+music's sense of progress without restoring the old backing track.
 
 Stereo placement, a synthetic cave reverb and a mix compressor give the sounds
 depth while keeping the melody and gameplay cues clear. Short, bounded

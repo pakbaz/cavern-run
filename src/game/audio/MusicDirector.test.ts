@@ -110,6 +110,36 @@ afterEach(() => {
 });
 
 describe('MusicDirector', () => {
+  it('never creates a noise source or bass pulse in any cave or time phase', () => {
+    stubWindow();
+    const log: Recording = { freqs: [], gains: [], nodes: 0, disconnects: 0, starts: [], delays: 0 };
+    const ctx = fakeContext(log);
+    ctx.createBufferSource = () => { throw new Error('Music must not create hiss or noise percussion'); };
+    const engine = { ctx, musicBus: { connect() {}, disconnect() {} }, unlock() {} };
+    const director = new MusicDirector(engine as never);
+    for (let cave = 0; cave < 20; cave += 1) {
+      director.start(cave, 20);
+      for (const intensity of [0, 0.5, 1]) {
+        const tones: { freq: number; peak: number; time: number; duration: number }[] = [];
+        const instrumented = director as unknown as {
+          intensity: number;
+          voice: (tone: typeof tones[number]) => void;
+          playStep: (step: number, time: number, stepSeconds: number) => void;
+        };
+        instrumented.intensity = intensity;
+        instrumented.voice = (tone) => { tones.push(tone); };
+        for (let step = 0; step < 64; step += 1) instrumented.playStep(step, 1 + step * 0.15, 0.15);
+        const sustained = tones.filter((tone) => tone.duration >= 1);
+        const melody = tones.filter((tone) => tone.duration < 1);
+        expect(melody.length).toBeGreaterThanOrEqual(themeForCave(cave).motif.length * 3);
+        expect(melody.every((tone) => tone.peak >= 0.035)).toBe(true);
+        expect(sustained.every((tone) => tone.peak < 0.01)).toBe(true);
+        expect(sustained.every((tone) => Math.abs((tone.time - 1) / 0.15 % 16) < 0.0001)).toBe(true);
+      }
+      director.stop(true);
+    }
+  });
+
   it('plays every cave from first movement to last without a bad value', () => {
     stubWindow();
     const log: Recording = {

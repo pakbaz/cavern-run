@@ -217,22 +217,16 @@ export interface LayerGains {
 export function layerGains(intensity: number, _secondsLeft: number, _phase: Phase): LayerGains {
   const i = clamp(intensity, 0, 1);
   return {
-    pad: 0.44 - i * 0.08,
-    bass: 0.36 + i * 0.1,
-    lead: ramp(i, 0.05, 0.28) * (0.38 + i * 0.14),
+    pad: 0.18 - i * 0.03,
+    bass: 0,
+    lead: 0.72 + i * 0.12,
     arp: 0,
-    drums: ramp(i, 0.42, 0.78) * (0.18 + i * 0.14),
-    hats: ramp(i, 0.62, 0.88) * 0.1,
+    drums: 0,
+    hats: 0,
     riser: 0,
     drone: 0,
     ticker: 0,
   };
-}
-
-/** Linear fade-in of a layer between two intensity thresholds. */
-function ramp(value: number, from: number, to: number): number {
-  if (to <= from) return value >= to ? 1 : 0;
-  return clamp((value - from) / (to - from), 0, 1);
 }
 
 /* ------------------------------------------------------------------ *
@@ -337,26 +331,15 @@ export function leadDegree(step: number, theme: CaveTheme, phase: Phase): number
 }
 
 /**
- * Does the lead sound on this step at all? It remains call-and-response at
- * every intensity, adding only a few notes while preserving the third-bar rest.
+ * Use the full melodic phrase from the start, retaining the third-bar rests.
+ * Pressure changes expression, not whether the tune can be heard at all.
  */
-export function leadPlays(step: number, intensity: number, theme: CaveTheme): boolean {
+export function leadPlays(step: number, _intensity: number, theme: CaveTheme): boolean {
   const bar = barOf(step, theme);
   const beat = beatOf(step);
   const slot = theme.rhythm.indexOf(beat);
 
-  if (intensity < 0.08) return false;
-
-  // At rest the tune is a call and answer with a whole middle bar left open.
-  // More notes fill in as pressure rises, but the inverted third bar remains
-  // deliberately sparse so the phrase keeps breathing.
   if (slot >= 0) {
-    if (intensity < 0.32) {
-      return bar !== 2 && (slot === 0 || slot === theme.rhythm.length - 1);
-    }
-    if (intensity < 0.75) {
-      return bar !== 2 || slot === 0 || slot === theme.rhythm.length - 1;
-    }
     return bar !== 2 || slot % 2 === 0 || slot === theme.rhythm.length - 1;
   }
   return false;
@@ -398,13 +381,11 @@ export interface DrumHit {
   readonly fill: boolean;
 }
 
-export function drumsAt(step: number, intensity: number, theme: CaveTheme, _phase: Phase): DrumHit {
-  const beat = beatOf(step);
-
+export function drumsAt(_step: number, _intensity: number, _theme: CaveTheme, _phase: Phase): DrumHit {
   return {
-    kick: theme.kicks.includes(beat),
-    snare: theme.snares.includes(beat),
-    hat: intensity >= 0.62 && (beat === 6 || beat === 14),
+    kick: false,
+    snare: false,
+    hat: false,
     fill: false,
   };
 }
@@ -420,7 +401,7 @@ export function tickerFreq(secondsLeft: number): number {
 
 /** Filter cutoff in Hz; gently brighter as intensity rises. */
 export function filterCutoff(intensity: number, _phase: Phase): number {
-  return 520 + clamp(intensity, 0, 1) * 1800;
+  return 1900 + clamp(intensity, 0, 1) * 400;
 }
 
 /** Seconds to crossfade when moving between caves. */
